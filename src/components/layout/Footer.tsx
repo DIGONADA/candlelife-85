@@ -46,7 +46,7 @@ export const Footer = () => {
   };
 
   return (
-    <footer className="border-t bg-background/95 backdrop-blur-md py-2">
+    <footer className="border-t-4 border-border/70 bg-background/95 backdrop-blur-md py-2">
       <div className="w-full max-w-7xl mx-auto px-3">
         {/* Main Action Buttons */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 mb-2">

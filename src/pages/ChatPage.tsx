@@ -2,26 +2,33 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Search, MessageCircle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
-import { useSimpleChat } from "@/hooks/useSimpleChat";
+import { useUnifiedChat } from "@/hooks/useUnifiedChat";
+import { SwipeableChatItem } from "@/components/chat/SwipeableChatItem";
 
 const ChatPage = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   
   const { 
-    chatUsers, 
-    isLoadingChatUsers, 
-    getTotalUnreadCount
-  } = useSimpleChat();
+    useChatUsers, 
+    getTotalUnreadCount,
+    useClearConversation,
+    useDeleteConversation
+  } = useUnifiedChat();
 
-  const filteredUsers = chatUsers?.filter(user =>
+  const chatUsersQuery = useChatUsers();
+  const clearConversation = useClearConversation();
+  const deleteConversation = useDeleteConversation();
+  
+  const chatUsers = chatUsersQuery.data || [];
+  const isLoadingChatUsers = chatUsersQuery.isLoading;
+
+  const filteredUsers = chatUsers.filter(user =>
     user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  );
 
   const totalUnread = getTotalUnreadCount();
 
@@ -34,33 +41,12 @@ const ChatPage = () => {
     });
   };
 
-  const formatLastMessage = (message: any) => {
-    if (!message) return "Nenhuma mensagem ainda";
-    
-    const content = message.content || "";
-    if (content.length > 50) {
-      return content.substring(0, 50) + "...";
-    }
-    return content;
+  const handleClearConversation = (userId: string) => {
+    clearConversation.mutate(userId);
   };
 
-  const formatMessageTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    
-    if (diffHours < 24) {
-      return date.toLocaleTimeString('pt-BR', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-    } else {
-      return date.toLocaleDateString('pt-BR', { 
-        day: '2-digit', 
-        month: '2-digit' 
-      });
-    }
+  const handleDeleteConversation = (userId: string) => {
+    deleteConversation.mutate(userId);
   };
 
   if (isLoadingChatUsers) {
@@ -125,53 +111,15 @@ const ChatPage = () => {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-border/50">
+          <div className="p-4 space-y-2">
             {filteredUsers.map((user) => (
-              <button
+              <SwipeableChatItem
                 key={user.id}
-                onClick={() => handleUserSelect(user)}
-                className="w-full p-4 flex items-center gap-3 hover:bg-accent/50 transition-colors text-left"
-              >
-                <div className="relative flex-shrink-0">
-                  <Avatar className="h-12 w-12">
-                    {user.avatar_url ? (
-                      <AvatarImage src={user.avatar_url} alt={user.username} />
-                    ) : (
-                      <AvatarFallback className="text-lg font-medium">
-                        {user.username.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  {user.unread_count > 0 && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs min-w-[20px]"
-                    >
-                      {user.unread_count > 99 ? '99+' : user.unread_count}
-                    </Badge>
-                  )}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-medium text-sm truncate">
-                      {user.username}
-                    </h3>
-                    {user.last_message && (
-                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                        {formatMessageTime(user.last_message.created_at)}
-                      </span>
-                    )}
-                  </div>
-                  <p className={`text-sm truncate ${
-                    user.unread_count > 0 
-                      ? "font-medium text-foreground" 
-                      : "text-muted-foreground"
-                  }`}>
-                    {formatLastMessage(user.last_message)}
-                  </p>
-                </div>
-              </button>
+                chatUser={user}
+                onSelectUser={handleUserSelect}
+                onClearConversation={handleClearConversation}
+                onDeleteConversation={handleDeleteConversation}
+              />
             ))}
           </div>
         )}

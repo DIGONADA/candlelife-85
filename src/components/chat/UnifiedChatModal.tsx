@@ -29,12 +29,27 @@ export const UnifiedChatModal = ({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  const { useConversation, useSendMessage, useMarkAsRead } = useUnifiedChat();
+  const { 
+    useConversation, 
+    useSendMessage, 
+    useMarkAsRead,
+    setActiveConversation 
+  } = useUnifiedChat();
+  
   const conversationQuery = useConversation(recipientId);
   const sendMessage = useSendMessage();
   const markAsRead = useMarkAsRead();
   
   const messages = conversationQuery.data || [];
+
+  // Set active conversation when modal opens
+  useEffect(() => {
+    if (isOpen && recipientId) {
+      setActiveConversation(recipientId);
+    } else {
+      setActiveConversation(null);
+    }
+  }, [isOpen, recipientId, setActiveConversation]);
 
   // Auto-scroll para o final quando novas mensagens chegam
   useEffect(() => {

@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +19,7 @@ export const useUnifiedChat = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
   const isSubscribedRef = useRef(false);
   const subscriptionIdRef = useRef<string | null>(null);
@@ -72,6 +74,12 @@ export const useUnifiedChat = () => {
       console.log('📨 New message received:', payload);
       const newMessage = payload.new as Message;
       
+      // Don't show notification if user is in the same conversation
+      if (activeConversation === newMessage.sender_id) {
+        console.log('🔇 User is in active conversation, skipping notification');
+        return;
+      }
+      
       try {
         // Get sender info
         const { data: senderData } = await supabase
@@ -92,7 +100,7 @@ export const useUnifiedChat = () => {
             unread_count: 0
           };
 
-          // Play enhanced notification sound
+          // Play enhanced notification sound only if not in active conversation
           console.log('🔊 Playing enhanced notification sound');
           await enhancedNotificationSoundService.play();
 
@@ -124,7 +132,7 @@ export const useUnifiedChat = () => {
     });
 
     return cleanup;
-  }, [user?.id, queryClient, cleanup]);
+  }, [user?.id, queryClient, cleanup, activeConversation]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -357,6 +365,78 @@ export const useUnifiedChat = () => {
     }
   });
 
+  // Clear conversation
+  const useClearConversation = () => useMutation({
+    mutationFn: async (otherUserId: string) => {
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('🗑️ Clearing conversation with:', otherUserId);
+
+      const { error } = await supabase.rpc('clear_conversation', {
+        p_user_id: user.id,
+        p_other_user_id: otherUserId
+      });
+
+      if (error) {
+        console.error('❌ Error clearing conversation:', error);
+        throw error;
+      }
+
+      console.log('✅ Conversation cleared');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+      toast({
+        title: "Conversa limpa",
+        description: "A conversa foi limpa com sucesso.",
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Clear conversation error:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível limpar a conversa. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Delete conversation
+  const useDeleteConversation = () => useMutation({
+    mutationFn: async (otherUserId: string) => {
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('🗑️ Deleting conversation with:', otherUserId);
+
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`);
+
+      if (error) {
+        console.error('❌ Error deleting conversation:', error);
+        throw error;
+      }
+
+      console.log('✅ Conversation deleted');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+      toast({
+        title: "Conversa excluída",
+        description: "A conversa foi excluída permanentemente.",
+      });
+    },
+    onError: (error) => {
+      console.error('❌ Delete conversation error:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a conversa. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Get total unread count
   const getTotalUnreadCount = useCallback(() => {
     const chatUsersQuery = useChatUsers();
@@ -366,10 +446,14 @@ export const useUnifiedChat = () => {
 
   return {
     isConnected,
+    activeConversation,
+    setActiveConversation,
     useChatUsers,
     useConversation,
     useSendMessage,
     useMarkAsRead,
+    useClearConversation,
+    useDeleteConversation,
     getTotalUnreadCount,
     cleanup
   };
