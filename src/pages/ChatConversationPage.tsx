@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -10,12 +11,8 @@ import { ArrowLeft, Send, Loader2, MoreVertical, Wifi, WifiOff } from "lucide-re
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { useSimpleChat } from "@/hooks/useSimpleChat";
-import { useOfflineChat } from "@/hooks/useOfflineChat";
-import { AttachmentSelector } from "@/components/chat/AttachmentSelector";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNative } from "@/hooks/useNative";
-import { useUserPresence } from "@/hooks/useUserPresence";
-import { unifiedNotificationService } from "@/services/unifiedNotificationService";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +30,6 @@ const ChatConversationPage = () => {
   const { hapticFeedback } = useNative();
   
   const [message, setMessage] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -43,21 +39,11 @@ const ChatConversationPage = () => {
     markAsRead
   } = useSimpleChat();
 
-  const {
-    isOnline,
-    sendMessageOffline,
-    getConversationMessages: getOfflineMessages,
-    cacheMessage
-  } = useOfflineChat();
-
   const conversationQuery = getConversationMessages(userId || "");
-  const messages = isOnline ? (conversationQuery.data || []) : getOfflineMessages(userId || "");
+  const messages = conversationQuery.data || [];
   
   const recipientName = location.state?.username || "Usuário";
   const recipientAvatar = location.state?.avatar_url;
-
-  const { getUserStatus } = useUserPresence();
-  const recipientStatus = getUserStatus(userId || "");
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -66,39 +52,29 @@ const ChatConversationPage = () => {
     }
   }, [messages]);
 
-  // Mark messages as read when online
+  // Mark messages as read
   useEffect(() => {
-    if (userId && isOnline) {
+    if (userId) {
       setTimeout(() => {
         markAsRead.mutate(userId);
       }, 1000);
     }
-  }, [userId, markAsRead, isOnline]);
+  }, [userId, markAsRead]);
 
   const handleSendMessage = async () => {
-    if ((!message.trim() && !selectedFile) || !userId) return;
+    if (!message.trim() || !userId) return;
 
     console.log('Tentando enviar mensagem:', { message: message.trim(), userId, user: user?.id });
 
     try {
-      if (isOnline) {
-        console.log('Enviando mensagem online...');
-        await sendMessageMutation.mutateAsync({
-          recipientId: userId,
-          content: message.trim(),
-          attachment: selectedFile || undefined
-        });
-        console.log('Mensagem enviada com sucesso!');
-      } else {
-        console.log('Enviando mensagem offline...');
-        const offlineMessage = await sendMessageOffline(userId, message.trim(), selectedFile || undefined);
-        if (offlineMessage) {
-          hapticFeedback('light');
-        }
-      }
+      console.log('Enviando mensagem...');
+      await sendMessageMutation.mutateAsync({
+        recipientId: userId,
+        content: message.trim()
+      });
+      console.log('Mensagem enviada com sucesso!');
       
       setMessage("");
-      setSelectedFile(null);
     } catch (error) {
       console.error("Error sending message:", error);
       toast({
@@ -157,34 +133,12 @@ const ChatConversationPage = () => {
     );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online':
-        return 'text-green-500';
-      case 'away':
-        return 'text-yellow-500';
-      default:
-        return 'text-gray-500';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'online':
-        return 'Online';
-      case 'away':
-        return 'Ausente';
-      default:
-        return 'Offline';
-    }
-  };
-
   if (!userId) {
     navigate('/chat');
     return null;
   }
 
-  if (conversationQuery.isLoading && messages.length === 0 && isOnline) {
+  if (conversationQuery.isLoading && messages.length === 0) {
     return (
       <div className="flex flex-col h-full w-full items-center justify-center p-6">
         <Spinner className="w-8 h-8 mb-4" />
@@ -222,10 +176,7 @@ const ChatConversationPage = () => {
                 </AvatarFallback>
               )}
             </Avatar>
-            <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-              recipientStatus === 'online' ? 'bg-green-500' :
-              recipientStatus === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
-            }`} />
+            <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background bg-green-500" />
           </div>
           
           <div className="flex-1 min-w-0">
@@ -233,19 +184,8 @@ const ChatConversationPage = () => {
               {recipientName}
             </h2>
             <div className="flex items-center gap-2">
-              {isOnline ? (
-                <>
-                  <Wifi className="h-3 w-3 text-green-500" />
-                  <p className={`text-xs ${getStatusColor(recipientStatus)}`}>
-                    {getStatusText(recipientStatus)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="h-3 w-3 text-red-500" />
-                  <p className="text-xs text-red-500">Sem conexão</p>
-                </>
-              )}
+              <Wifi className="h-3 w-3 text-green-500" />
+              <p className="text-xs text-green-500">Online</p>
             </div>
           </div>
 
@@ -344,16 +284,6 @@ const ChatConversationPage = () => {
 
       {/* Fixed Input Area */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-4 flex-shrink-0 safe-area-bottom">
-        {selectedFile && (
-          <div className="mb-3">
-            <AttachmentSelector
-              onFileSelect={setSelectedFile}
-              selectedFile={selectedFile}
-              onRemoveFile={() => setSelectedFile(null)}
-            />
-          </div>
-        )}
-        
         <div className="flex items-center gap-3 w-full">
           <Input
             value={message}
@@ -364,21 +294,13 @@ const ChatConversationPage = () => {
             disabled={sendMessageMutation.isPending}
           />
           
-          {!selectedFile && (
-            <AttachmentSelector
-              onFileSelect={setSelectedFile}
-              selectedFile={selectedFile}
-              onRemoveFile={() => setSelectedFile(null)}
-            />
-          )}
-          
           <Button
             size="icon"
             onClick={() => {
               handleSendMessage();
               hapticFeedback('light');
             }}
-            disabled={(!message.trim() && !selectedFile) || sendMessageMutation.isPending}
+            disabled={!message.trim() || sendMessageMutation.isPending}
             className="rounded-full flex-shrink-0"
           >
             {sendMessageMutation.isPending ? (

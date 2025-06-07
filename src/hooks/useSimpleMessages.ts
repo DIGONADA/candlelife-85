@@ -19,63 +19,88 @@ export const useSimpleMessages = () => {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<any>(null);
+  const isSubscribedRef = useRef(false);
 
-  // Setup realtime listener for new messages
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (channelRef.current && isSubscribedRef.current) {
+      console.log('🧹 Cleaning up realtime subscription');
+      try {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+        isSubscribedRef.current = false;
+        setIsConnected(false);
+      } catch (error) {
+        console.warn('Warning during cleanup:', error);
+      }
+    }
+  }, []);
+
+  // Setup realtime listener for new messages - only once per user
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id || isSubscribedRef.current) return;
 
     console.log('🔄 Setting up realtime for user:', user.id);
 
-    const channel = supabase
-      .channel('messages_realtime')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `recipient_id=eq.${user.id}`
-      }, async (payload) => {
-        console.log('📨 New message received:', payload);
-        const newMessage = payload.new as Message;
-        
-        // Get sender info
-        const { data: senderData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', newMessage.sender_id)
-          .single();
+    // Create unique channel name to avoid conflicts
+    const channelName = `messages_${user.id}_${Date.now()}`;
+    const channel = supabase.channel(channelName);
 
-        if (senderData) {
-          const senderInfo: ChatUser = {
-            id: senderData.id,
-            username: senderData.username || 'Usuário',
-            full_name: senderData.username || undefined,
-            avatar_url: senderData.avatar_url || undefined,
-            email: senderData.username || undefined,
-            created_at: senderData.created_at,
-            updated_at: senderData.updated_at,
-            unread_count: 0
-          };
+    channel.on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `recipient_id=eq.${user.id}`
+    }, async (payload) => {
+      console.log('📨 New message received:', payload);
+      const newMessage = payload.new as Message;
+      
+      // Get sender info
+      const { data: senderData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', newMessage.sender_id)
+        .single();
 
-          // Add notification to unified system
-          unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
-        }
+      if (senderData) {
+        const senderInfo: ChatUser = {
+          id: senderData.id,
+          username: senderData.username || 'Usuário',
+          full_name: senderData.username || undefined,
+          avatar_url: senderData.avatar_url || undefined,
+          email: senderData.username || undefined,
+          created_at: senderData.created_at,
+          updated_at: senderData.updated_at,
+          unread_count: 0
+        };
 
-        // Invalidate queries to refresh UI
-        queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-        queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
-      })
-      .subscribe();
+        // Add notification to unified system
+        unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
+      }
 
-    setIsConnected(true);
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+      queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
+    });
+
+    // Subscribe to the channel
+    channel.subscribe((status) => {
+      console.log('📡 Realtime status:', status);
+      if (status === 'SUBSCRIBED') {
+        setIsConnected(true);
+        isSubscribedRef.current = true;
+        console.log('✅ Realtime connected successfully');
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        setIsConnected(false);
+        isSubscribedRef.current = false;
+        console.log('❌ Realtime connection closed or error');
+      }
+    });
+
     channelRef.current = channel;
 
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        setIsConnected(false);
-      }
-    };
-  }, [user, queryClient]);
+    return cleanup;
+  }, [user?.id, queryClient, cleanup]);
 
   // Get chat users
   const useChatUsers = () => {
@@ -119,15 +144,25 @@ export const useSimpleMessages = () => {
             throw profileError;
           }
 
-          // Calculate unread count for each user
+          // Calculate unread count and last message for each user
           const chatUsers: ChatUser[] = await Promise.all(
             (profiles || []).map(async (profile: any) => {
+              // Get unread count
               const { count } = await supabase
                 .from('messages')
                 .select('*', { count: 'exact', head: true })
                 .eq('recipient_id', user.id)
                 .eq('sender_id', profile.id)
                 .eq('read', false);
+
+              // Get last message
+              const { data: lastMessageData } = await supabase
+                .from('messages')
+                .select('*')
+                .or(`and(sender_id.eq.${user.id},recipient_id.eq.${profile.id}),and(sender_id.eq.${profile.id},recipient_id.eq.${user.id})`)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
 
               return {
                 id: profile.id,
@@ -137,7 +172,8 @@ export const useSimpleMessages = () => {
                 email: profile.username || undefined,
                 created_at: profile.created_at || new Date().toISOString(),
                 updated_at: profile.updated_at || new Date().toISOString(),
-                unread_count: count || 0
+                unread_count: count || 0,
+                last_message: lastMessageData || undefined
               };
             })
           );
@@ -297,6 +333,7 @@ export const useSimpleMessages = () => {
     useConversation,
     useSendMessage,
     useMarkAsRead,
-    getTotalUnreadCount
+    getTotalUnreadCount,
+    cleanup
   };
 };
