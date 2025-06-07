@@ -90,7 +90,7 @@ export const EnhancedChatMessages = ({
     });
   };
 
-  const renderReactions = (reactions: any[], messageId: string) => {
+  const renderReactions = (reactions: any[] | undefined, messageId: string) => {
     if (!reactions || reactions.length === 0) return null;
 
     const reactionCounts = reactions.reduce((acc, r) => {
@@ -208,7 +208,7 @@ export const EnhancedChatMessages = ({
                     )}
                   </div>
                   
-                  {renderReactions(message.reactions, message.id)}
+                  {renderReactions(message.reactions || [], message.id)}
                   
                   <div className="flex items-center gap-2 mt-1">
                     <p className="text-xs text-muted-foreground">
