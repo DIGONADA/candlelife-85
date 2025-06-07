@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,35 +18,32 @@ export const useSimpleMessages = () => {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<any>(null);
-  const isSubscribingRef = useRef(false);
+  const isSubscribedRef = useRef(false);
 
   // Improved cleanup function
   const cleanup = useCallback(() => {
-    if (channelRef.current) {
-      console.log('🧹 Cleaning up realtime subscription');
+    if (channelRef.current && isSubscribedRef.current) {
+      console.log('🧹 Cleaning up messages realtime subscription');
       try {
         supabase.removeChannel(channelRef.current);
       } catch (error) {
-        console.warn('Warning during cleanup:', error);
+        console.warn('Warning during messages cleanup:', error);
       } finally {
         channelRef.current = null;
         setIsConnected(false);
-        isSubscribingRef.current = false;
+        isSubscribedRef.current = false;
       }
     }
   }, []);
 
   // Setup realtime listener with improved subscription management
   useEffect(() => {
-    if (!user?.id || isSubscribingRef.current) return;
+    if (!user?.id || isSubscribedRef.current) return;
 
-    // Prevent multiple subscriptions
-    isSubscribingRef.current = true;
-    
     // Clean up any existing subscription first
     cleanup();
 
-    console.log('🔄 Setting up realtime for user:', user.id);
+    console.log('🔄 Setting up messages realtime for user:', user.id);
 
     // Create unique channel name to avoid conflicts
     const channelName = `messages_${user.id}_${Date.now()}`;
@@ -92,22 +88,20 @@ export const useSimpleMessages = () => {
 
     // Subscribe to the channel with better error handling
     channel.subscribe((status) => {
-      console.log('📡 Realtime status:', status);
+      console.log('📡 Messages realtime status:', status);
       if (status === 'SUBSCRIBED') {
         setIsConnected(true);
         channelRef.current = channel;
-        console.log('✅ Realtime connected successfully');
+        isSubscribedRef.current = true;
+        console.log('✅ Messages realtime connected successfully');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         setIsConnected(false);
-        isSubscribingRef.current = false;
-        console.log('❌ Realtime connection closed or error');
+        isSubscribedRef.current = false;
+        console.log('❌ Messages realtime connection closed or error');
       }
     });
 
-    return () => {
-      console.log('🧹 Effect cleanup triggered');
-      cleanup();
-    };
+    return cleanup;
   }, [user?.id, queryClient, cleanup]);
 
   // Get chat users
