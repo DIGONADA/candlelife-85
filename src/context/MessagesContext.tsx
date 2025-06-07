@@ -79,7 +79,7 @@ export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         id: message.sender_id,
         username: 'Usuário',
         full_name: 'Usuário',
-        avatar_url: null,
+        avatar_url: undefined,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         unread_count: 0

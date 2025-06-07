@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Message, ChatUser, MessageType } from '@/types/messages';
 import { FileUploadService } from '@/services/fileUploadService';
-import { notificationService } from '@/services/notificationService';
+import { unifiedNotificationService } from '@/services/unifiedNotificationService';
 
 export const useSimpleChat = () => {
   const [conversations, setConversations] = useState<ChatUser[]>([]);
