@@ -78,13 +78,20 @@ export const UnifiedThemeProvider = ({ children }: { children: React.ReactNode }
     const resolved = resolveTheme(theme);
     setAppliedTheme(resolved);
     
+    // Remove all existing theme classes
+    document.documentElement.className = document.documentElement.className
+      .replace(/\bdark\b/g, '')
+      .replace(/\blight\b/g, '')
+      .trim();
+    
+    // Set the data-theme attribute for custom themes
     document.documentElement.setAttribute("data-theme", resolved);
     
     // Handle basic light/dark mode for compatibility
     if (resolved === "dark") {
       document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
+    } else if (resolved === "light") {
+      document.documentElement.classList.add("light");
     }
   }, [theme, resolveTheme]);
 
@@ -95,12 +102,19 @@ export const UnifiedThemeProvider = ({ children }: { children: React.ReactNode }
       const handleChange = () => {
         const resolved = resolveTheme(theme);
         setAppliedTheme(resolved);
+        
+        // Remove all existing theme classes
+        document.documentElement.className = document.documentElement.className
+          .replace(/\bdark\b/g, '')
+          .replace(/\blight\b/g, '')
+          .trim();
+        
         document.documentElement.setAttribute("data-theme", resolved);
         
         if (resolved === "dark") {
           document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
+        } else if (resolved === "light") {
+          document.documentElement.classList.add("light");
         }
       };
 

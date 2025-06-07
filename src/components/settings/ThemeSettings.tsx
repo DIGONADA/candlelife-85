@@ -3,9 +3,7 @@ import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { 
-  Moon, Sun, Palette, Zap, Ghost, Mountain, Coffee, 
-  PaintBucket, Sunset, Leaf, Waves, Sparkles, Clock, 
-  Crown, Terminal
+  Moon, Sun, Monitor
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
@@ -17,7 +15,7 @@ const themeCategories = [
     themes: [
       { id: "light", name: "Claro", icon: Sun },
       { id: "dark", name: "Escuro", icon: Moon },
-      { id: "system", name: "Sistema", icon: Palette },
+      { id: "system", name: "Sistema", icon: Monitor },
     ]
   }
 ];
