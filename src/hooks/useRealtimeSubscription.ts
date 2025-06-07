@@ -22,15 +22,15 @@ export const useRealtimeSubscription = ({
 }: SubscriptionConfig) => {
   const { user } = useAuth();
   
-  // This hook is deprecated in favor of RealtimeManager
+  // This hook is deprecated and should not be used anymore
   // Return empty cleanup function to prevent conflicts
   const cleanupSubscription = useCallback(() => {
-    console.log(`🛑 useRealtimeSubscription is deprecated for: ${channelName}`);
+    console.warn(`🛑 useRealtimeSubscription is deprecated for: ${channelName}. Use direct supabase.channel() instead.`);
   }, [channelName]);
 
   // Effect that does nothing but logs deprecation warning
   useEffect(() => {
-    console.warn(`⚠️ useRealtimeSubscription is deprecated for ${channelName}. Use RealtimeManager instead.`);
+    console.warn(`⚠️ useRealtimeSubscription is deprecated for ${channelName}. Use direct supabase.channel() instead.`);
     
     return cleanupSubscription;
   }, [user?.id, cleanupSubscription, ...dependencies]);

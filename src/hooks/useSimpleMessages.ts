@@ -42,6 +42,9 @@ export const useSimpleMessages = () => {
 
     console.log('🔄 Setting up realtime for user:', user.id);
 
+    // Clean up any existing channel first
+    cleanup();
+
     // Create unique channel name to avoid conflicts
     const channelName = `messages_${user.id}_${Date.now()}`;
     const channel = supabase.channel(channelName);
@@ -83,12 +86,13 @@ export const useSimpleMessages = () => {
       queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
     });
 
-    // Subscribe to the channel
+    // Subscribe to the channel only once
     channel.subscribe((status) => {
       console.log('📡 Realtime status:', status);
       if (status === 'SUBSCRIBED') {
         setIsConnected(true);
         isSubscribedRef.current = true;
+        channelRef.current = channel;
         console.log('✅ Realtime connected successfully');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         setIsConnected(false);
@@ -96,8 +100,6 @@ export const useSimpleMessages = () => {
         console.log('❌ Realtime connection closed or error');
       }
     });
-
-    channelRef.current = channel;
 
     return cleanup;
   }, [user?.id, queryClient, cleanup]);

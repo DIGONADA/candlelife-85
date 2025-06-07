@@ -11,7 +11,7 @@ import { subDays } from "date-fns";
 import { DateFilter } from "@/components/dashboard/DateFilter";
 import { EnhancedFinancialInsights } from "@/components/insights/EnhancedFinancialInsights";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -22,31 +22,38 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const queryClient = useQueryClient();
 
-  // Usar o novo hook para subscription robusta
-  useRealtimeSubscription({
-    channelName: 'dashboard-transactions',
-    filters: [
-      {
+  // Setup realtime subscription for dashboard data
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log("📢 Setting up dashboard realtime subscription");
+
+    const channel = supabase
+      .channel(`dashboard_${user.id}`)
+      .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'transactions',
-        filter: `user_id=eq.${user?.id || ''}`
-      }
-    ],
-    onSubscriptionChange: () => {
-      console.log("📢 Alteração detectada no banco de dados. Atualizando dashboard...");
-      queryClient.invalidateQueries({
-        queryKey: ["recent-transactions"]
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["expense-chart"]
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["financial-insights"]
-      });
-    },
-    dependencies: [user?.id]
-  });
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        console.log("📢 Transaction change detected. Updating dashboard...");
+        queryClient.invalidateQueries({
+          queryKey: ["recent-transactions"]
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["expense-chart"]
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["financial-insights"]
+        });
+      })
+      .subscribe();
+
+    return () => {
+      console.log("🧹 Cleaning up dashboard realtime subscription");
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
 
   return (
     <div className="w-full space-y-6 safe-area-top safe-area-bottom">

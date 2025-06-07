@@ -3,14 +3,14 @@ import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { InvoicedTransactionCard } from "@/components/invoiced/InvoicedTransactionCard";
 import { ConfirmPaymentsDialog } from "@/components/invoiced/ConfirmPaymentsDialog";
 import { useExpenses } from "@/hooks/useExpenses";
 import { DateFilter } from "@/components/dashboard/DateFilter";
 import { useQueryClient } from "@tanstack/react-query";
 import { startOfDay, endOfDay, format } from "date-fns";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { supabase } from "@/integrations/supabase/client";
 
 type Transaction = {
   id: string;
@@ -45,23 +45,30 @@ const ExpensesManagement = () => {
     descriptionFilter
   );
 
-  // Usar o novo hook para subscription robusta
-  useRealtimeSubscription({
-    channelName: 'expenses-transactions',
-    filters: [
-      {
+  // Setup realtime subscription for expenses
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log("📢 Setting up expenses realtime subscription");
+
+    const channel = supabase
+      .channel(`expenses_${user.id}`)
+      .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'transactions',
-        filter: `user_id=eq.${user?.id || ''}`
-      }
-    ],
-    onSubscriptionChange: () => {
-      console.log("📢 Alteração detectada em despesas. Atualizando...");
-      queryClient.invalidateQueries({ queryKey: ["expenses"] });
-    },
-    dependencies: [user?.id]
-  });
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        console.log("📢 Expense transaction change detected. Updating...");
+        queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      })
+      .subscribe();
+
+    return () => {
+      console.log("🧹 Cleaning up expenses realtime subscription");
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
 
   const toggleTransactionSelection = (transactionId: string) => {
     setSelectedTransactions((prev) =>
