@@ -14,6 +14,7 @@ class ChatSubscriptionManager {
   private subscriberCount = 0;
   private cleanupTimeout: any = null;
   private isSubscribing = false;
+  private channelName: string | null = null;
 
   static getInstance(): ChatSubscriptionManager {
     if (!ChatSubscriptionManager.instance) {
@@ -67,8 +68,20 @@ class ChatSubscriptionManager {
     try {
       console.log('🔄 Creating new subscription for user:', userId);
       
-      const channelName = `chat_messages_${userId}_${Date.now()}`;
-      this.channel = supabase.channel(channelName);
+      // Generate unique channel name to avoid conflicts
+      this.channelName = `chat_messages_${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Make sure any existing channel is completely removed
+      if (this.channel) {
+        try {
+          this.channel.unsubscribe();
+          supabase.removeChannel(this.channel);
+        } catch (error) {
+          console.warn('Warning cleaning up old channel:', error);
+        }
+      }
+      
+      this.channel = supabase.channel(this.channelName);
       this.currentUserId = userId;
 
       // Add postgres changes listener
@@ -81,15 +94,21 @@ class ChatSubscriptionManager {
 
       // Subscribe with status handling
       this.channel.subscribe((status: string) => {
-        console.log('📡 Subscription status:', status);
+        console.log('📡 Subscription status:', status, 'for channel:', this.channelName);
         if (status === 'SUBSCRIBED') {
           this.isActive = true;
           this.isSubscribing = false;
-          console.log('✅ Chat subscription active');
+          console.log('✅ Chat subscription active for channel:', this.channelName);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.log('❌ Subscription error:', status);
+          console.log('❌ Subscription error:', status, 'for channel:', this.channelName);
           this.isActive = false;
           this.isSubscribing = false;
+          
+          // Only cleanup if this is our current channel
+          if (this.channel && this.channel.topic === this.channelName) {
+            this.channel = null;
+            this.channelName = null;
+          }
         }
       });
 
@@ -173,6 +192,7 @@ class ChatSubscriptionManager {
     
     if (this.channel) {
       try {
+        console.log('🧹 Cleaning up channel:', this.channelName);
         // Properly unsubscribe and remove channel
         this.channel.unsubscribe();
         supabase.removeChannel(this.channel);
@@ -182,6 +202,7 @@ class ChatSubscriptionManager {
     }
     
     this.channel = null;
+    this.channelName = null;
     this.currentUserId = null;
     this.isActive = false;
     this.isSubscribing = false;

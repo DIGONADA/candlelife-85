@@ -20,15 +20,16 @@ export const useUnifiedChat = () => {
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const hasSetupRef = useRef(false);
+  const subscriptionSetupRef = useRef(false);
 
   // Setup chat subscription only once
   useEffect(() => {
-    if (!user?.id || hasSetupRef.current) {
+    if (!user?.id || subscriptionSetupRef.current) {
       return;
     }
 
     mountedRef.current = true;
-    hasSetupRef.current = true;
+    subscriptionSetupRef.current = true;
     
     console.log('🔄 Setting up chat for user:', user.id);
     
@@ -49,11 +50,19 @@ export const useUnifiedChat = () => {
 
     return () => {
       mountedRef.current = false;
-      hasSetupRef.current = false;
+      subscriptionSetupRef.current = false;
       clearInterval(statusInterval);
       chatSubscriptionManager.unsubscribe();
     };
   }, [user?.id, queryClient]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      subscriptionSetupRef.current = false;
+    };
+  }, []);
 
   // Get chat users
   const useChatUsers = () => {
