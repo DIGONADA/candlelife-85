@@ -1,8 +1,10 @@
+
 import { useState, useEffect } from "react";
 import { useMessagesContext } from "@/context/MessagesContext";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useTypingIndicator } from "@/hooks/messages/useTypingIndicator";
+import { useUnifiedChat } from "@/hooks/useUnifiedChat";
 import { Message } from "@/types/messages";
 
 interface UseChatMessagesProps {
@@ -17,17 +19,16 @@ export const useChatMessages = ({ recipientId, isOpen }: UseChatMessagesProps) =
   const [isSearching, setIsSearching] = useState(false);
   
   const {
-    useConversation,
     sendMessage,
     clearConversation,
-    deleteMessage,
-    editMessage,
+    deleteConversation,
     setActiveConversation
   } = useMessagesContext();
 
+  const { useConversation } = useUnifiedChat();
   const { sendTypingStatus, isUserTyping } = useTypingIndicator();
   
-  // Use the conversation hook with just recipientId and searchQuery
+  // Use the conversation hook directly from unified chat
   const conversationQuery = useConversation(recipientId, searchQuery);
   const messages = conversationQuery.data || [];
   const isLoading = conversationQuery.isLoading;
@@ -130,59 +131,24 @@ export const useChatMessages = ({ recipientId, isOpen }: UseChatMessagesProps) =
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    if (!user) {
-      toast({
-        title: "Erro",
-        description: "Você precisa estar autenticado para excluir mensagens",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      await deleteMessage(messageId);
-      refetch();
-      toast({
-        title: "Mensagem excluída",
-        description: "A mensagem foi excluída com sucesso."
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: `Não foi possível excluir a mensagem: ${error.message || 'Erro desconhecido'}`,
-        variant: "destructive",
-      });
-    }
+    console.log("Delete message not implemented:", messageId);
+    toast({
+      title: "Funcionalidade não disponível",
+      description: "Exclusão de mensagens individuais não está implementada.",
+      variant: "destructive",
+    });
   };
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
-    if (!user) {
-      toast({
-        title: "Erro",
-        description: "Você precisa estar autenticado para editar mensagens",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      await editMessage(messageId, newContent);
-      refetch();
-      toast({
-        title: "Mensagem editada",
-        description: "A mensagem foi editada com sucesso."
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: `Não foi possível editar a mensagem: ${error.message || 'Erro desconhecido'}`,
-        variant: "destructive",
-      });
-    }
+    console.log("Edit message not implemented:", messageId, newContent);
+    toast({
+      title: "Funcionalidade não disponível",
+      description: "Edição de mensagens não está implementada.",
+      variant: "destructive",
+    });
   };
 
   const handleLoadMoreMessages = async () => {
-    // Not implemented for simplicity
     console.log("Load more messages not implemented");
   };
   
