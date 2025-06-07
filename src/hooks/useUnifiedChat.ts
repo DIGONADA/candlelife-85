@@ -23,15 +23,20 @@ export const useUnifiedChat = () => {
   const channelRef = useRef<any>(null);
   const isSubscribedRef = useRef(false);
   const subscriptionIdRef = useRef<string | null>(null);
+  const cleanupCallRef = useRef<(() => void) | null>(null);
 
   // Improved cleanup function
   const cleanup = useCallback(() => {
-    if (channelRef.current && isSubscribedRef.current) {
+    if (isSubscribedRef.current && channelRef.current) {
       console.log('🧹 Cleaning up unified chat subscription');
       try {
         const channel = channelRef.current;
-        channel.unsubscribe();
-        supabase.removeChannel(channel);
+        if (channel && typeof channel.unsubscribe === 'function') {
+          channel.unsubscribe();
+        }
+        if (supabase && typeof supabase.removeChannel === 'function') {
+          supabase.removeChannel(channel);
+        }
       } catch (error) {
         console.warn('Warning during unified chat cleanup:', error);
       } finally {
@@ -43,6 +48,11 @@ export const useUnifiedChat = () => {
     }
   }, []);
 
+  // Store cleanup function in ref to call it from other effects
+  useEffect(() => {
+    cleanupCallRef.current = cleanup;
+  }, [cleanup]);
+
   // Setup unified chat system with improved subscription management
   useEffect(() => {
     if (!user?.id) {
@@ -53,6 +63,7 @@ export const useUnifiedChat = () => {
     // Prevent duplicate subscriptions
     const currentSubscriptionId = `unified_chat_${user.id}`;
     if (isSubscribedRef.current && subscriptionIdRef.current === currentSubscriptionId) {
+      console.log('🔄 Subscription already active, skipping');
       return;
     }
 
@@ -61,16 +72,22 @@ export const useUnifiedChat = () => {
 
     console.log('🔄 Setting up unified chat system for user:', user.id);
 
+    // Create unique channel name to avoid conflicts
     const channelName = `unified_chat_${user.id}_${Date.now()}`;
-    const channel = supabase.channel(channelName);
+    
+    let channel;
+    try {
+      channel = supabase.channel(channelName);
+    } catch (error) {
+      console.error('Error creating channel:', error);
+      return;
+    }
+
+    // Store channel reference before subscription
+    channelRef.current = channel;
 
     // Listen for new messages
-    const subscription = channel.on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages',
-      filter: `recipient_id=eq.${user.id}`
-    }, async (payload) => {
+    const messageHandler = async (payload: any) => {
       console.log('📨 New message received:', payload);
       const newMessage = payload.new as Message;
       
@@ -114,30 +131,48 @@ export const useUnifiedChat = () => {
       } catch (error) {
         console.error('Error processing new message:', error);
       }
-    });
+    };
+
+    // Add postgres changes listener
+    channel.on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `recipient_id=eq.${user.id}`
+    }, messageHandler);
 
     // Subscribe with proper status handling
-    subscription.subscribe((status) => {
+    channel.subscribe((status: string) => {
       console.log('📡 Unified chat status:', status);
       if (status === 'SUBSCRIBED') {
         setIsConnected(true);
-        channelRef.current = channel;
         isSubscribedRef.current = true;
         subscriptionIdRef.current = currentSubscriptionId;
         console.log('✅ Unified chat connected successfully');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         console.log('❌ Unified chat connection closed or error:', status);
-        cleanup();
+        setIsConnected(false);
+        isSubscribedRef.current = false;
+        subscriptionIdRef.current = null;
       }
     });
 
-    return cleanup;
-  }, [user?.id, queryClient, cleanup, activeConversation]);
+    // Return cleanup function
+    return () => {
+      if (cleanupCallRef.current) {
+        cleanupCallRef.current();
+      }
+    };
+  }, [user?.id, queryClient, activeConversation]);
 
   // Cleanup on unmount
   useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+    return () => {
+      if (cleanupCallRef.current) {
+        cleanupCallRef.current();
+      }
+    };
+  }, []);
 
   // Get chat users
   const useChatUsers = () => {
