@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Search, MessageCircle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
-import { useUnifiedChat } from "@/hooks/useUnifiedChat";
+import { useMessagesContext } from "@/context/MessagesContext";
 import { SwipeableChatItem } from "@/components/chat/SwipeableChatItem";
 
 const ChatPage = () => {
@@ -13,18 +13,12 @@ const ChatPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   
   const { 
-    useChatUsers, 
+    chatUsers,
+    isLoadingChatUsers,
     getTotalUnreadCount,
-    useClearConversation,
-    useDeleteConversation
-  } = useUnifiedChat();
-
-  const chatUsersQuery = useChatUsers();
-  const clearConversation = useClearConversation();
-  const deleteConversation = useDeleteConversation();
-  
-  const chatUsers = chatUsersQuery.data || [];
-  const isLoadingChatUsers = chatUsersQuery.isLoading;
+    clearConversation,
+    deleteConversation
+  } = useMessagesContext();
 
   const filteredUsers = chatUsers.filter(user =>
     user.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -42,11 +36,11 @@ const ChatPage = () => {
   };
 
   const handleClearConversation = (userId: string) => {
-    clearConversation.mutate(userId);
+    clearConversation(userId);
   };
 
   const handleDeleteConversation = (userId: string) => {
-    deleteConversation.mutate(userId);
+    deleteConversation(userId);
   };
 
   if (isLoadingChatUsers) {

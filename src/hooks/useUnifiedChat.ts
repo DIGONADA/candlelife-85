@@ -22,8 +22,6 @@ export const useUnifiedChat = () => {
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
   const isSubscribedRef = useRef(false);
-  const subscriptionIdRef = useRef<string | null>(null);
-  const cleanupCallRef = useRef<(() => void) | null>(null);
 
   // Improved cleanup function
   const cleanup = useCallback(() => {
@@ -43,17 +41,11 @@ export const useUnifiedChat = () => {
         channelRef.current = null;
         setIsConnected(false);
         isSubscribedRef.current = false;
-        subscriptionIdRef.current = null;
       }
     }
   }, []);
 
-  // Store cleanup function in ref to call it from other effects
-  useEffect(() => {
-    cleanupCallRef.current = cleanup;
-  }, [cleanup]);
-
-  // Setup unified chat system with improved subscription management
+  // Setup unified chat system - SINGLE subscription only
   useEffect(() => {
     if (!user?.id) {
       cleanup();
@@ -61,14 +53,10 @@ export const useUnifiedChat = () => {
     }
 
     // Prevent duplicate subscriptions
-    const currentSubscriptionId = `unified_chat_${user.id}`;
-    if (isSubscribedRef.current && subscriptionIdRef.current === currentSubscriptionId) {
+    if (isSubscribedRef.current) {
       console.log('🔄 Subscription already active, skipping');
       return;
     }
-
-    // Clean up any existing subscription first
-    cleanup();
 
     console.log('🔄 Setting up unified chat system for user:', user.id);
 
@@ -85,6 +73,7 @@ export const useUnifiedChat = () => {
 
     // Store channel reference before subscription
     channelRef.current = channel;
+    isSubscribedRef.current = true;
 
     // Listen for new messages
     const messageHandler = async (payload: any) => {
@@ -146,33 +135,22 @@ export const useUnifiedChat = () => {
       console.log('📡 Unified chat status:', status);
       if (status === 'SUBSCRIBED') {
         setIsConnected(true);
-        isSubscribedRef.current = true;
-        subscriptionIdRef.current = currentSubscriptionId;
         console.log('✅ Unified chat connected successfully');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         console.log('❌ Unified chat connection closed or error:', status);
         setIsConnected(false);
         isSubscribedRef.current = false;
-        subscriptionIdRef.current = null;
       }
     });
 
     // Return cleanup function
-    return () => {
-      if (cleanupCallRef.current) {
-        cleanupCallRef.current();
-      }
-    };
-  }, [user?.id, queryClient, activeConversation]);
+    return cleanup;
+  }, [user?.id, queryClient, activeConversation, cleanup]);
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      if (cleanupCallRef.current) {
-        cleanupCallRef.current();
-      }
-    };
-  }, []);
+    return cleanup;
+  }, [cleanup]);
 
   // Get chat users
   const useChatUsers = () => {
@@ -421,18 +399,6 @@ export const useUnifiedChat = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-      toast({
-        title: "Conversa limpa",
-        description: "A conversa foi limpa com sucesso.",
-      });
-    },
-    onError: (error) => {
-      console.error('❌ Clear conversation error:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível limpar a conversa. Tente novamente.",
-        variant: "destructive",
-      });
     }
   });
 
@@ -457,18 +423,6 @@ export const useUnifiedChat = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-      toast({
-        title: "Conversa excluída",
-        description: "A conversa foi excluída permanentemente.",
-      });
-    },
-    onError: (error) => {
-      console.error('❌ Delete conversation error:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível excluir a conversa. Tente novamente.",
-        variant: "destructive",
-      });
     }
   });
 

@@ -1,9 +1,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { useMessages } from '@/hooks/useMessages';
-import { useNotificationSystem } from '@/hooks/useNotificationSystem';
-import { unifiedNotificationService } from '@/services/unifiedNotificationService';
+import { useUnifiedChat } from '@/hooks/useUnifiedChat';
+import { useToast } from '@/hooks/use-toast';
 import { Message, ChatUser } from '@/types/messages';
 
 interface MessagesContextType {
@@ -17,16 +16,7 @@ interface MessagesContextType {
   markConversationAsRead: (userId: string) => Promise<void>;
   sendMessage: (recipientId: string, content: string, attachment?: File) => Promise<void>;
   clearConversation: (userId: string) => Promise<void>;
-  deleteMessage: (messageId: string) => Promise<void>;
-  editMessage: (messageId: string, content: string) => Promise<void>;
-  
-  // Notification system
-  requestNotificationPermissions: () => Promise<boolean>;
-  
-  // Hooks for components
-  useChatUsers: ReturnType<typeof useMessages>['useChatUsers'];
-  useConversation: ReturnType<typeof useMessages>['useConversation'];
-  showNotification: (message: Message) => Promise<void>;
+  deleteConversation: (userId: string) => Promise<void>;
   
   // Direct data access
   chatUsers: ChatUser[];
@@ -38,61 +28,29 @@ const MessagesContext = createContext<MessagesContextType | undefined>(undefined
 
 export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [activeConversation, setActiveConversationState] = useState<string | null>(null);
+  const { toast } = useToast();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const {
+    isConnected,
+    activeConversation,
+    setActiveConversation,
     useChatUsers,
-    useConversation,
     useSendMessage,
-    useMarkConversationAsRead,
+    useMarkAsRead,
     useClearConversation,
-    useDeleteMessage,
-    useEditMessage,
-    showNotification,
-    chatUsers,
-    isLoadingChatUsers,
+    useDeleteConversation,
     getTotalUnreadCount
-  } = useMessages();
+  } = useUnifiedChat();
 
-  // Inicializar sistema de notificações
-  const {
-    handleNewMessage: processNotification,
-    requestPermissions,
-    isInitialized: notificationSystemReady
-  } = useNotificationSystem();
-
+  const chatUsersQuery = useChatUsers();
   const sendMessage = useSendMessage();
-  const markAsRead = useMarkConversationAsRead();
+  const markAsRead = useMarkAsRead();
   const clearChat = useClearConversation();
-  const deleteMsg = useDeleteMessage();
-  const editMsg = useEditMessage();
+  const deleteChat = useDeleteConversation();
 
-  // Auto-request permissions when user logs in
-  useEffect(() => {
-    if (user && notificationSystemReady) {
-      // Request permissions with a slight delay to avoid overwhelming the user
-      setTimeout(() => {
-        requestPermissions();
-      }, 2000);
-    }
-  }, [user, notificationSystemReady, requestPermissions]);
-
-  const setActiveConversation = useCallback((userId: string | null) => {
-    console.log('📱 Setting active conversation:', userId);
-    setActiveConversationState(userId);
-    
-    // Mark as read when opening conversation
-    if (userId) {
-      setTimeout(() => {
-        markAsRead.mutate(userId, {
-          onSuccess: () => {
-            setUnreadCount(prev => Math.max(0, prev - 1));
-          }
-        });
-      }, 1000);
-    }
-  }, [markAsRead]);
+  const chatUsers = chatUsersQuery.data || [];
+  const isLoadingChatUsers = chatUsersQuery.isLoading;
 
   const markConversationAsRead = useCallback(async (userId: string) => {
     return new Promise<void>((resolve, reject) => {
@@ -115,9 +73,7 @@ export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       sendMessage.mutate({
         recipientId,
         content,
-        attachmentUrl: attachment ? URL.createObjectURL(attachment) : undefined,
-        fileName: attachment?.name,
-        fileSize: attachment?.size
+        attachment
       }, {
         onSuccess: () => resolve(),
         onError: reject
@@ -128,45 +84,57 @@ export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearConversationAction = useCallback(async (userId: string) => {
     return new Promise<void>((resolve, reject) => {
       clearChat.mutate(userId, {
-        onSuccess: () => resolve(),
-        onError: reject
+        onSuccess: () => {
+          toast({
+            title: "Conversa limpa",
+            description: "A conversa foi limpa com sucesso.",
+          });
+          resolve();
+        },
+        onError: (error) => {
+          toast({
+            title: "Erro",
+            description: "Não foi possível limpar a conversa.",
+            variant: "destructive",
+          });
+          reject(error);
+        }
       });
     });
-  }, [clearChat]);
+  }, [clearChat, toast]);
 
-  const deleteMessageAction = useCallback(async (messageId: string) => {
+  const deleteConversationAction = useCallback(async (userId: string) => {
     return new Promise<void>((resolve, reject) => {
-      deleteMsg.mutate(messageId, {
-        onSuccess: () => resolve(),
-        onError: reject
+      deleteChat.mutate(userId, {
+        onSuccess: () => {
+          toast({
+            title: "Conversa excluída",
+            description: "A conversa foi excluída permanentemente.",
+          });
+          resolve();
+        },
+        onError: (error) => {
+          toast({
+            title: "Erro",
+            description: "Não foi possível excluir a conversa.",
+            variant: "destructive",
+          });
+          reject(error);
+        }
       });
     });
-  }, [deleteMsg]);
-
-  const editMessageAction = useCallback(async (messageId: string, content: string) => {
-    return new Promise<void>((resolve, reject) => {
-      editMsg.mutate({ messageId, content }, {
-        onSuccess: () => resolve(),
-        onError: reject
-      });
-    });
-  }, [editMsg]);
+  }, [deleteChat, toast]);
 
   return (
     <MessagesContext.Provider value={{
       activeConversation,
-      isConnected: true, // We'll get this from the simple messages hook
+      isConnected,
       unreadCount,
       setActiveConversation,
       markConversationAsRead,
       sendMessage: sendMessageAction,
       clearConversation: clearConversationAction,
-      deleteMessage: deleteMessageAction,
-      editMessage: editMessageAction,
-      requestNotificationPermissions: requestPermissions,
-      useChatUsers,
-      useConversation,
-      showNotification,
+      deleteConversation: deleteConversationAction,
       chatUsers,
       isLoadingChatUsers,
       getTotalUnreadCount
