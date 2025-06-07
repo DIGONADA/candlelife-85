@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Bell, X, MessageSquare, DollarSign, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,13 +10,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { unifiedNotificationService, NotificationData } from "@/services/unifiedNotificationService";
+import { unifiedNotificationService, UnifiedNotificationData } from "@/services/unifiedNotificationService";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 
 export const GlobalNotificationCenter = () => {
-  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [notifications, setNotifications] = useState<UnifiedNotificationData[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -26,7 +27,7 @@ export const GlobalNotificationCenter = () => {
 
   const unreadCount = unifiedNotificationService.getUnreadCount();
 
-  const handleNotificationClick = (notification: NotificationData) => {
+  const handleNotificationClick = (notification: UnifiedNotificationData) => {
     unifiedNotificationService.markAsRead(notification.id);
     
     if (notification.type === 'message' && notification.conversationId) {
@@ -153,4 +154,15 @@ export const GlobalNotificationCenter = () => {
       </PopoverContent>
     </Popover>
   );
+
+  function getNotificationIcon(type: string) {
+    switch (type) {
+      case 'message':
+        return <MessageSquare className="h-4 w-4" />;
+      case 'transaction':
+        return <DollarSign className="h-4 w-4" />;
+      default:
+        return <Settings className="h-4 w-4" />;
+    }
+  }
 };

@@ -4,7 +4,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { Message, ChatUser } from '@/types/messages';
-import { notificationService } from '@/services/notificationService';
+import { unifiedNotificationService } from '@/services/unifiedNotificationService';
 
 export const useAdvancedMessages = () => {
   const { user } = useAuth();
@@ -130,13 +130,13 @@ export const useAdvancedMessages = () => {
   };
 
   const updateUnreadCount = useCallback(() => {
-    const unread = notificationService.getUnreadCount();
+    const unread = unifiedNotificationService.getUnreadCount();
     setTotalUnreadCount(unread);
   }, []);
 
   useEffect(() => {
     updateUnreadCount();
-    const unsubscribe = notificationService.subscribe(() => {
+    const unsubscribe = unifiedNotificationService.subscribe(() => {
       updateUnreadCount();
     });
 
@@ -165,7 +165,7 @@ export const useAdvancedMessages = () => {
           .single();
 
         if (senderData) {
-          notificationService.addMessageNotification(newMessage, {
+          unifiedNotificationService.addMessageNotification(newMessage, {
             id: senderData.id,
             username: senderData.username,
             full_name: senderData.username || '',
@@ -199,4 +199,94 @@ export const useAdvancedMessages = () => {
     useClearConversation,
     getTotalUnreadCount
   };
+
+  function useSendMessage() {
+    return useMutation({
+      mutationFn: async ({ content, recipientId }: { content: string; recipientId: string }) => {
+        if (!user) throw new Error('User not authenticated');
+
+        const { data, error } = await supabase
+          .from('messages')
+          .insert({
+            sender_id: user.id,
+            recipient_id: recipientId,
+            content,
+            message_type: 'text'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['conversation'] });
+      }
+    });
+  }
+
+  function useEditMessage() {
+    return useMutation({
+      mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+        if (!user) throw new Error('User not authenticated');
+
+        const { data, error } = await supabase.rpc('edit_message', {
+          p_message_id: messageId,
+          p_user_id: user.id,
+          p_new_content: content
+        });
+
+        if (error) throw error;
+        return data;
+      }
+    });
+  }
+
+  function useDeleteMessage() {
+    return useMutation({
+      mutationFn: async (messageId: string) => {
+        if (!user) throw new Error('User not authenticated');
+
+        const { data, error } = await supabase.rpc('soft_delete_message', {
+          p_message_id: messageId,
+          p_user_id: user.id
+        });
+
+        if (error) throw error;
+        return data;
+      }
+    });
+  }
+
+  function useMarkConversationAsRead() {
+    return useMutation({
+      mutationFn: async (userId: string) => {
+        if (!user) throw new Error('User not authenticated');
+
+        const { data, error } = await supabase.rpc('mark_conversation_as_read_v2', {
+          p_recipient_id: user.id,
+          p_sender_id: userId
+        });
+
+        if (error) throw error;
+        return data;
+      }
+    });
+  }
+
+  function useClearConversation() {
+    return useMutation({
+      mutationFn: async (userId: string) => {
+        if (!user) throw new Error('User not authenticated');
+
+        const { data, error } = await supabase.rpc('clear_conversation', {
+          p_user_id: user.id,
+          p_other_user_id: userId
+        });
+
+        if (error) throw error;
+        return data;
+      }
+    });
+  }
 };
