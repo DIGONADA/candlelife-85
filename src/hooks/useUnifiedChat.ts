@@ -14,12 +14,155 @@ import {
   MessageType
 } from '@/types/messages';
 
-// Global subscription state to prevent multiple instances
-let globalSubscription: {
-  channel: any;
-  userId: string;
-  isActive: boolean;
-} | null = null;
+// Singleton class to manage global subscription state
+class UnifiedChatSubscriptionManager {
+  private static instance: UnifiedChatSubscriptionManager;
+  private channel: any = null;
+  private currentUserId: string | null = null;
+  private isActive = false;
+  private subscribers = new Set<string>();
+  private queryClient: any = null;
+
+  private constructor() {}
+
+  static getInstance(): UnifiedChatSubscriptionManager {
+    if (!UnifiedChatSubscriptionManager.instance) {
+      UnifiedChatSubscriptionManager.instance = new UnifiedChatSubscriptionManager();
+    }
+    return UnifiedChatSubscriptionManager.instance;
+  }
+
+  subscribe(userId: string, queryClient: any): boolean {
+    console.log('🔄 Attempting to subscribe:', { userId, currentUserId: this.currentUserId, isActive: this.isActive });
+    
+    this.queryClient = queryClient;
+    const subscriberId = `${userId}_${Date.now()}_${Math.random()}`;
+    this.subscribers.add(subscriberId);
+
+    // If already active for the same user, just return true
+    if (this.isActive && this.currentUserId === userId && this.channel) {
+      console.log('🔄 Subscription already active for user, reusing');
+      return true;
+    }
+
+    // Clean up any existing subscription
+    this.cleanup();
+
+    try {
+      console.log('🔄 Creating new subscription for user:', userId);
+      
+      // Create unique channel name
+      const channelName = `unified_chat_${userId}_${Date.now()}`;
+      this.channel = supabase.channel(channelName);
+      this.currentUserId = userId;
+
+      // Add postgres changes listener
+      this.channel.on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `recipient_id=eq.${userId}`
+      }, this.handleMessage.bind(this));
+
+      // Subscribe with proper status handling
+      this.channel.subscribe((status: string) => {
+        console.log('📡 Unified chat status:', status);
+        if (status === 'SUBSCRIBED') {
+          this.isActive = true;
+          console.log('✅ Unified chat connected successfully');
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.log('❌ Unified chat connection closed or error:', status);
+          this.isActive = false;
+        }
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error creating subscription:', error);
+      this.cleanup();
+      return false;
+    }
+  }
+
+  unsubscribe(userId: string): void {
+    // Only cleanup if this is the last subscriber for this user
+    const userSubscribers = Array.from(this.subscribers).filter(id => id.startsWith(userId));
+    if (userSubscribers.length <= 1) {
+      console.log('🧹 Last subscriber, cleaning up');
+      this.cleanup();
+    }
+  }
+
+  private async handleMessage(payload: any) {
+    console.log('📨 New message received:', payload);
+    const newMessage = payload.new as Message;
+    
+    try {
+      // Get sender info
+      const { data: senderData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', newMessage.sender_id)
+        .single();
+
+      if (senderData) {
+        const senderInfo: ChatUser = {
+          id: senderData.id,
+          username: senderData.username || 'Usuário',
+          full_name: senderData.username || undefined,
+          avatar_url: senderData.avatar_url || undefined,
+          email: senderData.username || undefined,
+          created_at: senderData.created_at,
+          updated_at: senderData.updated_at,
+          unread_count: 0
+        };
+
+        // Play enhanced notification sound
+        console.log('🔊 Playing enhanced notification sound');
+        await enhancedNotificationSoundService.play();
+
+        // Add notification to unified system
+        unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
+
+        // Invalidate queries to refresh UI
+        if (this.queryClient) {
+          this.queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+          this.queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing new message:', error);
+    }
+  }
+
+  private cleanup(): void {
+    if (this.channel) {
+      console.log('🧹 Cleaning up unified chat subscription');
+      try {
+        if (typeof this.channel.unsubscribe === 'function') {
+          this.channel.unsubscribe();
+        }
+        if (supabase && typeof supabase.removeChannel === 'function') {
+          supabase.removeChannel(this.channel);
+        }
+      } catch (error) {
+        console.warn('Warning during unified chat cleanup:', error);
+      }
+    }
+    
+    this.channel = null;
+    this.currentUserId = null;
+    this.isActive = false;
+    this.subscribers.clear();
+  }
+
+  getConnectionStatus(): { isConnected: boolean; userId: string | null } {
+    return {
+      isConnected: this.isActive,
+      userId: this.currentUserId
+    };
+  }
+}
 
 export const useUnifiedChat = () => {
   const { user } = useAuth();
@@ -27,146 +170,31 @@ export const useUnifiedChat = () => {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
+  const subscriptionManager = useRef(UnifiedChatSubscriptionManager.getInstance());
 
-  // Improved cleanup function
-  const cleanup = useCallback(() => {
-    if (globalSubscription && globalSubscription.isActive) {
-      console.log('🧹 Cleaning up unified chat subscription');
-      try {
-        const channel = globalSubscription.channel;
-        if (channel && typeof channel.unsubscribe === 'function') {
-          channel.unsubscribe();
-        }
-        if (supabase && typeof supabase.removeChannel === 'function') {
-          supabase.removeChannel(channel);
-        }
-      } catch (error) {
-        console.warn('Warning during unified chat cleanup:', error);
-      } finally {
-        globalSubscription = null;
-        setIsConnected(false);
-      }
-    }
-  }, []);
-
-  // Setup unified chat system - SINGLE subscription only
+  // Setup unified chat system
   useEffect(() => {
     if (!user?.id) {
-      cleanup();
+      setIsConnected(false);
       return;
     }
-
-    // Prevent duplicate subscriptions using global state
-    if (globalSubscription && globalSubscription.userId === user.id && globalSubscription.isActive) {
-      console.log('🔄 Subscription already active for user, skipping');
-      setIsConnected(true);
-      return;
-    }
-
-    // Clean up any existing subscription first
-    cleanup();
 
     console.log('🔄 Setting up unified chat system for user:', user.id);
-
-    // Create unique channel name to avoid conflicts
-    const channelName = `unified_chat_${user.id}_${Date.now()}`;
     
-    let channel;
-    try {
-      channel = supabase.channel(channelName);
-    } catch (error) {
-      console.error('Error creating channel:', error);
-      return;
-    }
+    const success = subscriptionManager.current.subscribe(user.id, queryClient);
+    setIsConnected(success);
 
-    // Set global subscription state before subscribing
-    globalSubscription = {
-      channel,
-      userId: user.id,
-      isActive: false
+    // Check connection status periodically
+    const statusInterval = setInterval(() => {
+      const status = subscriptionManager.current.getConnectionStatus();
+      setIsConnected(status.isConnected && status.userId === user.id);
+    }, 1000);
+
+    return () => {
+      clearInterval(statusInterval);
+      subscriptionManager.current.unsubscribe(user.id);
     };
-
-    // Listen for new messages
-    const messageHandler = async (payload: any) => {
-      console.log('📨 New message received:', payload);
-      const newMessage = payload.new as Message;
-      
-      // Don't show notification if user is in the same conversation
-      if (activeConversation === newMessage.sender_id) {
-        console.log('🔇 User is in active conversation, skipping notification');
-        return;
-      }
-      
-      try {
-        // Get sender info
-        const { data: senderData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', newMessage.sender_id)
-          .single();
-
-        if (senderData) {
-          const senderInfo: ChatUser = {
-            id: senderData.id,
-            username: senderData.username || 'Usuário',
-            full_name: senderData.username || undefined,
-            avatar_url: senderData.avatar_url || undefined,
-            email: senderData.username || undefined,
-            created_at: senderData.created_at,
-            updated_at: senderData.updated_at,
-            unread_count: 0
-          };
-
-          // Play enhanced notification sound only if not in active conversation
-          console.log('🔊 Playing enhanced notification sound');
-          await enhancedNotificationSoundService.play();
-
-          // Add notification to unified system
-          unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
-
-          // Invalidate queries to refresh UI
-          queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-          queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
-        }
-      } catch (error) {
-        console.error('Error processing new message:', error);
-      }
-    };
-
-    // Add postgres changes listener
-    channel.on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages',
-      filter: `recipient_id=eq.${user.id}`
-    }, messageHandler);
-
-    // Subscribe with proper status handling
-    channel.subscribe((status: string) => {
-      console.log('📡 Unified chat status:', status);
-      if (status === 'SUBSCRIBED') {
-        setIsConnected(true);
-        if (globalSubscription) {
-          globalSubscription.isActive = true;
-        }
-        console.log('✅ Unified chat connected successfully');
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-        console.log('❌ Unified chat connection closed or error:', status);
-        setIsConnected(false);
-        if (globalSubscription) {
-          globalSubscription.isActive = false;
-        }
-      }
-    });
-
-    // Return cleanup function
-    return cleanup;
-  }, [user?.id, queryClient, activeConversation, cleanup]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+  }, [user?.id, queryClient]);
 
   // Get chat users
   const useChatUsers = () => {
@@ -448,6 +476,12 @@ export const useUnifiedChat = () => {
     const chatUsers = chatUsersQuery.data || [];
     return chatUsers.reduce((total, user) => total + user.unread_count, 0);
   }, []);
+
+  const cleanup = useCallback(() => {
+    if (user?.id) {
+      subscriptionManager.current.unsubscribe(user.id);
+    }
+  }, [user?.id]);
 
   return {
     isConnected,
