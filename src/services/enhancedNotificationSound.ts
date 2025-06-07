@@ -4,6 +4,7 @@ class EnhancedNotificationSoundService {
   private audioContext: AudioContext | null = null;
   private isEnabled = true;
   private isInitialized = false;
+  private unlockAttempted = false;
 
   constructor() {
     this.initializeAudio();
@@ -11,15 +12,15 @@ class EnhancedNotificationSoundService {
 
   private async initializeAudio() {
     try {
-      // Criar contexto de áudio para melhor compatibilidade mobile
+      // Create audio context for better mobile compatibility
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
-      // Tentar carregar o arquivo de áudio
+      // Try to load audio file
       this.audio = new Audio('/notification-sound.mp3');
       this.audio.preload = 'auto';
-      this.audio.volume = 0.7;
+      this.audio.volume = 0.8;
       
-      // Para mobile, precisamos de interação do usuário primeiro
+      // Setup mobile audio unlock
       this.setupMobileAudioUnlock();
       
       this.isInitialized = true;
@@ -31,55 +32,72 @@ class EnhancedNotificationSoundService {
   }
 
   private setupMobileAudioUnlock() {
-    const unlockAudio = () => {
-      if (this.audioContext && this.audioContext.state === 'suspended') {
-        this.audioContext.resume().then(() => {
+    if (this.unlockAttempted) return;
+
+    const unlockAudio = async () => {
+      this.unlockAttempted = true;
+      
+      try {
+        // Resume audio context if suspended
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
           console.log('🔊 Audio context resumed for mobile');
-        });
+        }
+        
+        // Prepare audio for playback
+        if (this.audio && this.audio.readyState >= 2) {
+          const playPromise = this.audio.play();
+          if (playPromise !== undefined) {
+            await playPromise;
+            this.audio.pause();
+            this.audio.currentTime = 0;
+            console.log('🔊 Audio unlocked for mobile');
+          }
+        }
+      } catch (error) {
+        console.warn('Audio unlock failed:', error);
       }
       
-      // Preparar o áudio para reprodução
-      if (this.audio) {
-        this.audio.play().then(() => {
-          this.audio!.pause();
-          this.audio!.currentTime = 0;
-          console.log('🔊 Audio unlocked for mobile');
-        }).catch(() => {
-          // Silenciosamente ignorar erro se o usuário ainda não interagiu
-        });
-      }
-      
-      // Remover listeners após primeira interação
+      // Remove listeners after first successful interaction
       document.removeEventListener('touchstart', unlockAudio);
       document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
     };
 
-    document.addEventListener('touchstart', unlockAudio, { once: true });
+    // Add multiple event listeners for different interaction types
+    document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
     document.addEventListener('click', unlockAudio, { once: true });
+    document.addEventListener('keydown', unlockAudio, { once: true });
   }
 
-  private createFallbackSound() {
+  private async createFallbackSound() {
     try {
       if (!this.audioContext) {
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
 
+      // Create a synthesized beep sound as fallback
       this.audio = {
-        play: () => {
-          const oscillator = this.audioContext!.createOscillator();
-          const gainNode = this.audioContext!.createGain();
+        play: async () => {
+          if (!this.audioContext) return;
+          
+          const oscillator = this.audioContext.createOscillator();
+          const gainNode = this.audioContext.createGain();
           
           oscillator.connect(gainNode);
-          gainNode.connect(this.audioContext!.destination);
+          gainNode.connect(this.audioContext.destination);
           
-          oscillator.frequency.value = 800;
+          // Create a pleasant notification sound
+          oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
+          oscillator.frequency.setValueAtTime(600, this.audioContext.currentTime + 0.1);
           oscillator.type = 'sine';
           
-          gainNode.gain.setValueAtTime(0.3, this.audioContext!.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext!.currentTime + 0.5);
+          gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
           
-          oscillator.start(this.audioContext!.currentTime);
-          oscillator.stop(this.audioContext!.currentTime + 0.5);
+          oscillator.start(this.audioContext.currentTime);
+          oscillator.stop(this.audioContext.currentTime + 0.5);
           
           return Promise.resolve();
         }
@@ -98,44 +116,51 @@ class EnhancedNotificationSoundService {
     }
 
     try {
-      // Garantir que o contexto de áudio está ativo
+      // Ensure audio context is active for mobile
       if (this.audioContext && this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
       }
 
-      console.log('🔊 Playing notification sound');
+      console.log('🔊 Playing enhanced notification sound');
+      
+      // Reset audio to beginning
+      if (this.audio.currentTime > 0) {
+        this.audio.currentTime = 0;
+      }
+      
       const playPromise = this.audio.play();
       
       if (playPromise !== undefined) {
         await playPromise;
-        console.log('✅ Notification sound played successfully');
+        console.log('✅ Enhanced notification sound played successfully');
       }
     } catch (error) {
       console.warn('Failed to play notification sound:', error);
-      // Tentar fallback se falhar
-      this.createFallbackSound();
-      if (this.audio) {
-        try {
+      
+      // Try fallback sound if main sound fails
+      try {
+        await this.createFallbackSound();
+        if (this.audio) {
           await this.audio.play();
-        } catch (fallbackError) {
-          console.warn('Fallback sound also failed:', fallbackError);
+          console.log('✅ Fallback sound played successfully');
         }
+      } catch (fallbackError) {
+        console.warn('Fallback sound also failed:', fallbackError);
       }
     }
   }
 
   setEnabled(enabled: boolean) {
     this.isEnabled = enabled;
-    console.log(`🔊 Notification sound ${enabled ? 'enabled' : 'disabled'}`);
+    console.log(`🔊 Enhanced notification sound ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   isAudioEnabled() {
     return this.isEnabled;
   }
 
-  // Método para testar o som
   async testSound() {
-    console.log('🧪 Testing notification sound');
+    console.log('🧪 Testing enhanced notification sound');
     await this.play();
   }
 }
