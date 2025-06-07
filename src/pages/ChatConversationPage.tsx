@@ -85,7 +85,8 @@ const ChatConversationPage = () => {
         console.log('Enviando mensagem online...');
         await sendMessageMutation.mutateAsync({
           recipientId: userId,
-          content: message.trim()
+          content: message.trim(),
+          attachment: selectedFile || undefined
         });
         console.log('Mensagem enviada com sucesso!');
       } else {

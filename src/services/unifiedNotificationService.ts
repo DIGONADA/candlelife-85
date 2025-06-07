@@ -1,4 +1,5 @@
 import { Message, ChatUser } from '@/types/messages';
+import { notificationSoundService } from './notificationSound';
 
 export interface UnifiedNotificationData {
   id: string;
@@ -80,6 +81,8 @@ class UnifiedNotificationService {
   }
 
   addMessageNotification(message: Message, senderInfo: ChatUser) {
+    console.log('🔔 Adding message notification:', { message: message.content.substring(0, 50), sender: senderInfo.username });
+    
     this.addNotification({
       type: 'message',
       title: `Nova mensagem de ${senderInfo.username}`,
@@ -176,34 +179,14 @@ class UnifiedNotificationService {
 
   private playSound() {
     if (!this.soundEnabled) return;
-
-    try {
-      // Criar elemento de áudio dinamicamente
-      const audio = document.createElement('audio');
-      audio.preload = 'auto';
-      
-      // Tentar diferentes formatos de som
-      const soundSources = [
-        'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmAaAjiR2O7RfSkFJG7A7+CVSA0PV6zn77BdGQU+ltryxnkpBSl+zPLaizsIGGS57eOYTgwOUarm7blmGgU5k9n1unEiBC13yO/eizELIWmy5eyhUQ0QXbXr6b1mHggx...' // Som de notificação simples em base64
-      ];
-      
-      audio.src = soundSources[0];
-      audio.volume = 0.3;
-      
-      // Tocar o som
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.warn('Failed to play notification sound:', error);
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to create notification sound:', error);
-    }
+    
+    console.log('🔊 Playing notification sound');
+    notificationSoundService.play();
   }
 
   setSoundEnabled(enabled: boolean) {
     this.soundEnabled = enabled;
+    notificationSoundService.setEnabled(enabled);
   }
 
   setPushEnabled(enabled: boolean) {
