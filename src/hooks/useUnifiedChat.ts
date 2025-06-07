@@ -14,21 +14,26 @@ import {
   MessageType
 } from '@/types/messages';
 
+// Global subscription state to prevent multiple instances
+let globalSubscription: {
+  channel: any;
+  userId: string;
+  isActive: boolean;
+} | null = null;
+
 export const useUnifiedChat = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
-  const channelRef = useRef<any>(null);
-  const isSubscribedRef = useRef(false);
 
   // Improved cleanup function
   const cleanup = useCallback(() => {
-    if (isSubscribedRef.current && channelRef.current) {
+    if (globalSubscription && globalSubscription.isActive) {
       console.log('🧹 Cleaning up unified chat subscription');
       try {
-        const channel = channelRef.current;
+        const channel = globalSubscription.channel;
         if (channel && typeof channel.unsubscribe === 'function') {
           channel.unsubscribe();
         }
@@ -38,9 +43,8 @@ export const useUnifiedChat = () => {
       } catch (error) {
         console.warn('Warning during unified chat cleanup:', error);
       } finally {
-        channelRef.current = null;
+        globalSubscription = null;
         setIsConnected(false);
-        isSubscribedRef.current = false;
       }
     }
   }, []);
@@ -52,11 +56,15 @@ export const useUnifiedChat = () => {
       return;
     }
 
-    // Prevent duplicate subscriptions
-    if (isSubscribedRef.current) {
-      console.log('🔄 Subscription already active, skipping');
+    // Prevent duplicate subscriptions using global state
+    if (globalSubscription && globalSubscription.userId === user.id && globalSubscription.isActive) {
+      console.log('🔄 Subscription already active for user, skipping');
+      setIsConnected(true);
       return;
     }
+
+    // Clean up any existing subscription first
+    cleanup();
 
     console.log('🔄 Setting up unified chat system for user:', user.id);
 
@@ -71,9 +79,12 @@ export const useUnifiedChat = () => {
       return;
     }
 
-    // Store channel reference before subscription
-    channelRef.current = channel;
-    isSubscribedRef.current = true;
+    // Set global subscription state before subscribing
+    globalSubscription = {
+      channel,
+      userId: user.id,
+      isActive: false
+    };
 
     // Listen for new messages
     const messageHandler = async (payload: any) => {
@@ -135,11 +146,16 @@ export const useUnifiedChat = () => {
       console.log('📡 Unified chat status:', status);
       if (status === 'SUBSCRIBED') {
         setIsConnected(true);
+        if (globalSubscription) {
+          globalSubscription.isActive = true;
+        }
         console.log('✅ Unified chat connected successfully');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         console.log('❌ Unified chat connection closed or error:', status);
         setIsConnected(false);
-        isSubscribedRef.current = false;
+        if (globalSubscription) {
+          globalSubscription.isActive = false;
+        }
       }
     });
 
