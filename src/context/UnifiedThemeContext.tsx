@@ -44,7 +44,6 @@ export const UnifiedThemeProvider = ({ children }: { children: React.ReactNode }
             .from('user_themes')
             .select('theme_name')
             .eq('user_id', user.id)
-            .eq('is_active', true)
             .single();
           
           if (error && error.code !== 'PGRST116') {
@@ -120,19 +119,12 @@ export const UnifiedThemeProvider = ({ children }: { children: React.ReactNode }
       
       // If user is authenticated, save their preference to their profile
       if (user) {
-        // First deactivate all themes
-        await supabase
-          .from('user_themes')
-          .update({ is_active: false })
-          .eq('user_id', user.id);
-        
-        // Then set the new active theme
+        // Use upsert to insert or update the theme preference
         const { error } = await supabase
           .from('user_themes')
           .upsert({
             user_id: user.id,
             theme_name: newTheme,
-            is_active: true,
             updated_at: new Date().toISOString()
           });
           

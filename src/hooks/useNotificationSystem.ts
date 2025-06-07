@@ -1,7 +1,7 @@
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { notificationService } from '@/services/notificationService';
 import { Message, ChatUser } from '@/types/messages';
 
 interface NotificationSystemConfig {
