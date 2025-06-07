@@ -174,7 +174,7 @@ export const useSimpleMessages = () => {
                 read: lastMessageData.read || false,
                 message_status: lastMessageData.message_status || MessageStatus.SENT,
                 message_type: MessageType.TEXT,
-                attachment_url: lastMessageData.attachment_url,
+                attachment_url: lastMessageData.attachment_url || undefined,
                 deleted_by_recipient: lastMessageData.deleted_by_recipient || false,
                 reactions: []
               } : undefined;
@@ -242,7 +242,7 @@ export const useSimpleMessages = () => {
             read: msg.read || false,
             message_status: msg.message_status || MessageStatus.SENT,
             message_type: MessageType.TEXT,
-            attachment_url: msg.attachment_url,
+            attachment_url: msg.attachment_url || undefined,
             deleted_by_recipient: false,
             reactions: []
           }));

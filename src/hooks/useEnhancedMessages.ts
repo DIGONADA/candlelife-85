@@ -7,11 +7,29 @@ import { useToast } from './use-toast';
 import { messageKeys } from '@/lib/query-keys';
 import { Message, ChatUser, MessageStatus, MessageType } from '@/types/messages';
 
+// Export types that enhanced components expect
+export interface EnhancedMessage extends Message {}
+
+export interface ConversationSettings {
+  id?: string;
+  user_id?: string;
+  other_user_id?: string;
+  notifications_enabled: boolean;
+  archived: boolean;
+  pinned: boolean;
+  muted: boolean;
+  nickname: string;
+  background_image: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export const useEnhancedMessages = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
 
   // Setup realtime listener for new messages
@@ -103,21 +121,27 @@ export const useEnhancedMessages = () => {
   };
 
   // Get conversation messages
-  const useConversation = (otherUserId: string) => {
+  const useConversation = (otherUserId: string, searchTerm?: string) => {
     return useQuery({
-      queryKey: messageKeys.conversation(otherUserId),
-      queryFn: async (): Promise<Message[]> => {
+      queryKey: messageKeys.conversationWithSearch(otherUserId, searchTerm || ''),
+      queryFn: async (): Promise<EnhancedMessage[]> => {
         if (!user || !otherUserId) return [];
 
-        const { data, error } = await supabase
+        let query = supabase
           .from('messages')
           .select('*')
           .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`)
           .order('created_at', { ascending: true });
 
+        if (searchTerm) {
+          query = query.ilike('content', `%${searchTerm}%`);
+        }
+
+        const { data, error } = await query;
+
         if (error) throw error;
 
-        const messages: Message[] = (data || []).map((msg: any) => ({
+        const messages: EnhancedMessage[] = (data || []).map((msg: any) => ({
           id: msg.id,
           content: msg.content,
           sender_id: msg.sender_id,
@@ -126,9 +150,13 @@ export const useEnhancedMessages = () => {
           read: msg.read || false,
           message_status: msg.message_status || MessageStatus.SENT,
           message_type: MessageType.TEXT,
-          attachment_url: msg.attachment_url,
+          attachment_url: msg.attachment_url || undefined,
           deleted_by_recipient: false,
-          reactions: []
+          reactions: [],
+          sender_username: undefined,
+          sender_avatar_url: undefined,
+          file_name: undefined,
+          file_size: undefined
         }));
 
         return messages;
@@ -137,9 +165,118 @@ export const useEnhancedMessages = () => {
     });
   };
 
+  // Send message mutation
+  const useSendMessage = () => useMutation({
+    mutationFn: async ({ 
+      recipientId, 
+      content, 
+      messageType = 'text',
+      attachmentUrl,
+      fileName,
+      fileSize
+    }: { 
+      recipientId: string; 
+      content: string; 
+      messageType?: string;
+      attachmentUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+    }) => {
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          recipient_id: recipientId,
+          content,
+          message_status: 'sent',
+          attachment_url: attachmentUrl
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+      queryClient.invalidateQueries({ queryKey: messageKeys.conversation(data.recipient_id) });
+    }
+  });
+
+  // Toggle reaction mutation (placeholder)
+  const useToggleReaction = () => useMutation({
+    mutationFn: async ({ messageId, reaction }: { messageId: string; reaction: string }) => {
+      // Placeholder - reactions not implemented in database yet
+      console.log('Toggle reaction:', messageId, reaction);
+    }
+  });
+
+  // Mark conversation as read
+  const useMarkConversationAsRead = () => useMutation({
+    mutationFn: async (otherUserId: string) => {
+      if (!user) throw new Error('User not authenticated');
+
+      const { error } = await supabase
+        .from('messages')
+        .update({ read: true })
+        .eq('recipient_id', user.id)
+        .eq('sender_id', otherUserId)
+        .eq('read', false);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+    }
+  });
+
+  // Clear conversation mutation (placeholder)
+  const useClearConversation = () => useMutation({
+    mutationFn: async (otherUserId: string) => {
+      // Placeholder - clear conversation not implemented yet
+      console.log('Clear conversation:', otherUserId);
+    }
+  });
+
+  // Conversation settings query (placeholder)
+  const useConversationSettings = (otherUserId: string) => {
+    return useQuery({
+      queryKey: ['conversation-settings', otherUserId],
+      queryFn: async (): Promise<ConversationSettings | null> => {
+        // Placeholder - conversation settings not implemented yet
+        return {
+          notifications_enabled: true,
+          archived: false,
+          pinned: false,
+          muted: false,
+          nickname: '',
+          background_image: ''
+        };
+      },
+      enabled: !!user && !!otherUserId
+    });
+  };
+
+  // Update conversation settings mutation (placeholder)
+  const useUpdateConversationSettings = () => useMutation({
+    mutationFn: async ({ otherUserId, settings }: { otherUserId: string; settings: Partial<ConversationSettings> }) => {
+      // Placeholder - update conversation settings not implemented yet
+      console.log('Update conversation settings:', otherUserId, settings);
+    }
+  });
+
   return {
     isConnected,
     useChatUsers,
-    useConversation
+    useConversation,
+    useSendMessage,
+    useToggleReaction,
+    useMarkConversationAsRead,
+    useClearConversation,
+    useConversationSettings,
+    useUpdateConversationSettings,
+    setActiveConversation
   };
 };
