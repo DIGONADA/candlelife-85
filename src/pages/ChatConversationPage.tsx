@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -79,13 +78,18 @@ const ChatConversationPage = () => {
   const handleSendMessage = async () => {
     if ((!message.trim() && !selectedFile) || !userId) return;
 
+    console.log('Tentando enviar mensagem:', { message: message.trim(), userId, user: user?.id });
+
     try {
       if (isOnline) {
+        console.log('Enviando mensagem online...');
         await sendMessageMutation.mutateAsync({
           recipientId: userId,
           content: message.trim()
         });
+        console.log('Mensagem enviada com sucesso!');
       } else {
+        console.log('Enviando mensagem offline...');
         const offlineMessage = await sendMessageOffline(userId, message.trim(), selectedFile || undefined);
         if (offlineMessage) {
           hapticFeedback('light');
@@ -217,7 +221,6 @@ const ChatConversationPage = () => {
                 </AvatarFallback>
               )}
             </Avatar>
-            {/* Status indicator */}
             <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
               recipientStatus === 'online' ? 'bg-green-500' :
               recipientStatus === 'away' ? 'bg-yellow-500' : 'bg-gray-400'

@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Message, ChatUser, MessageType } from '@/types/messages';
-import { FileUploadService } from '@/services/fileUploadService';
 import { unifiedNotificationService } from '@/services/unifiedNotificationService';
 
 export const useSimpleChat = () => {
@@ -30,6 +29,8 @@ export const useSimpleChat = () => {
           if (message.sender_id !== user.id) userIds.add(message.sender_id);
           if (message.recipient_id !== user.id) userIds.add(message.recipient_id);
         });
+
+        if (userIds.size === 0) return [];
 
         const { data: profiles } = await supabase
           .from('profiles')
@@ -100,20 +101,7 @@ export const useSimpleChat = () => {
     }) => {
       if (!user) throw new Error('Usuário não autenticado');
 
-      let attachmentUrl: string | undefined;
-      let fileName: string | undefined;
-      let fileSize: number | undefined;
-
-      if (attachment) {
-        try {
-          attachmentUrl = await FileUploadService.uploadMessageAttachment(attachment, user.id);
-          fileName = attachment.name;
-          fileSize = attachment.size;
-        } catch (error) {
-          console.error('Erro no upload do arquivo:', error);
-          throw new Error('Falha no upload do arquivo');
-        }
-      }
+      console.log('Enviando mensagem:', { recipientId, content, user: user.id });
 
       const { data, error } = await supabase
         .from('messages')
@@ -121,20 +109,26 @@ export const useSimpleChat = () => {
           sender_id: user.id,
           recipient_id: recipientId,
           content,
-          message_type: attachment ? MessageType.FILE : MessageType.TEXT,
-          attachment_url: attachmentUrl,
-          file_name: fileName,
-          file_size: fileSize
+          message_status: 'sent'
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao enviar mensagem:', error);
+        throw error;
+      }
+      
+      console.log('Mensagem enviada com sucesso:', data);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Invalidando queries após envio...');
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['messages'] });
+    },
+    onError: (error) => {
+      console.error('Erro na mutação de envio:', error);
     }
   });
 

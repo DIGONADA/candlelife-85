@@ -50,7 +50,7 @@ export const useAdvancedMessages = () => {
             sender_id: user.id,
             recipient_id: recipientId,
             content,
-            message_type: 'text'
+            message_status: 'sent'
           })
           .select()
           .single();
@@ -60,6 +60,7 @@ export const useAdvancedMessages = () => {
       },
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['conversation'] });
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
       }
     });
   };
