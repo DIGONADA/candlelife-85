@@ -3,12 +3,10 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Bell, X } from 'lucide-react';
-import { useMessagesContext } from '@/context/MessagesContext';
 
 export const NotificationPermissionBanner = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [hasAsked, setHasAsked] = useState(false);
-  const { requestNotificationPermissions } = useMessagesContext();
 
   useEffect(() => {
     // Verificar se já pedimos permissão ou se já foi concedida
@@ -27,9 +25,15 @@ export const NotificationPermissionBanner = () => {
     setHasAsked(true);
     localStorage.setItem('notification-permission-asked', 'true');
     
-    const granted = await requestNotificationPermissions();
-    if (granted) {
-      setIsVisible(false);
+    try {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          setIsVisible(false);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to request notification permission:', error);
     }
   };
 
