@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { useUnifiedChat } from '@/hooks/useUnifiedChat';
 import { useToast } from '@/hooks/use-toast';
-import { Message, ChatUser } from '@/types/messages';
+import { ChatUser } from '@/types/messages';
 
 interface MessagesContextType {
   // State
