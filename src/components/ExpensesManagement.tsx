@@ -1,9 +1,8 @@
-
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { InvoicedTransactionCard } from "@/components/invoiced/InvoicedTransactionCard";
 import { ConfirmPaymentsDialog } from "@/components/invoiced/ConfirmPaymentsDialog";
 import { useExpenses } from "@/hooks/useExpenses";
@@ -32,6 +31,7 @@ const ExpensesManagement = () => {
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const channelRef = useRef<any>(null);
 
   const { transactions, isLoading, confirmPayments } = useExpenses(
     user?.id,
@@ -49,24 +49,41 @@ const ExpensesManagement = () => {
   useEffect(() => {
     if (!user?.id) return;
 
+    // Clean up any existing subscription first
+    if (channelRef.current) {
+      console.log("🧹 Cleaning up existing expenses subscription");
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     console.log("📢 Setting up expenses realtime subscription");
 
-    const channel = supabase
-      .channel(`expenses_${user.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'transactions',
-        filter: `user_id=eq.${user.id}`
-      }, () => {
-        console.log("📢 Expense transaction change detected. Updating...");
-        queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      })
-      .subscribe();
+    const channelName = `expenses_${user.id}_${Date.now()}`;
+    const channel = supabase.channel(channelName);
+
+    channel.on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'transactions',
+      filter: `user_id=eq.${user.id}`
+    }, () => {
+      console.log("📢 Expense transaction change detected. Updating...");
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channelRef.current = channel;
+        console.log("✅ Expenses realtime subscription active");
+      }
+    });
 
     return () => {
       console.log("🧹 Cleaning up expenses realtime subscription");
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [user?.id, queryClient]);
 

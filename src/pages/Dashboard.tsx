@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { ExpenseModal } from "@/components/ExpenseModal";
@@ -21,37 +21,55 @@ const Dashboard = () => {
   const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 7));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const queryClient = useQueryClient();
+  const channelRef = useRef<any>(null);
 
   // Setup realtime subscription for dashboard data
   useEffect(() => {
     if (!user?.id) return;
 
+    // Clean up any existing subscription first
+    if (channelRef.current) {
+      console.log("🧹 Cleaning up existing dashboard subscription");
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     console.log("📢 Setting up dashboard realtime subscription");
 
-    const channel = supabase
-      .channel(`dashboard_${user.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'transactions',
-        filter: `user_id=eq.${user.id}`
-      }, () => {
-        console.log("📢 Transaction change detected. Updating dashboard...");
-        queryClient.invalidateQueries({
-          queryKey: ["recent-transactions"]
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["expense-chart"]
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["financial-insights"]
-        });
-      })
-      .subscribe();
+    const channelName = `dashboard_${user.id}_${Date.now()}`;
+    const channel = supabase.channel(channelName);
+
+    channel.on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'transactions',
+      filter: `user_id=eq.${user.id}`
+    }, () => {
+      console.log("📢 Transaction change detected. Updating dashboard...");
+      queryClient.invalidateQueries({
+        queryKey: ["recent-transactions"]
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["expense-chart"]
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["financial-insights"]
+      });
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channelRef.current = channel;
+        console.log("✅ Dashboard realtime subscription active");
+      }
+    });
 
     return () => {
       console.log("🧹 Cleaning up dashboard realtime subscription");
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [user?.id, queryClient]);
 

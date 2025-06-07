@@ -19,87 +19,93 @@ export const useSimpleMessages = () => {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<any>(null);
-  const isSubscribedRef = useRef(false);
+  const cleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cleanup function
   const cleanup = useCallback(() => {
-    if (channelRef.current && isSubscribedRef.current) {
+    if (cleanupTimeoutRef.current) {
+      clearTimeout(cleanupTimeoutRef.current);
+      cleanupTimeoutRef.current = null;
+    }
+
+    if (channelRef.current) {
       console.log('🧹 Cleaning up realtime subscription');
       try {
         supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-        isSubscribedRef.current = false;
-        setIsConnected(false);
       } catch (error) {
         console.warn('Warning during cleanup:', error);
+      } finally {
+        channelRef.current = null;
+        setIsConnected(false);
       }
     }
   }, []);
 
-  // Setup realtime listener for new messages - only once per user
+  // Setup realtime listener - only once per user with proper cleanup
   useEffect(() => {
-    if (!user?.id || isSubscribedRef.current) return;
+    if (!user?.id) return;
+
+    // Clean up any existing subscription first
+    cleanup();
 
     console.log('🔄 Setting up realtime for user:', user.id);
 
-    // Clean up any existing channel first
-    cleanup();
+    // Small delay to ensure cleanup is complete
+    cleanupTimeoutRef.current = setTimeout(() => {
+      // Create unique channel name to avoid conflicts
+      const channelName = `messages_${user.id}_${Date.now()}`;
+      const channel = supabase.channel(channelName);
 
-    // Create unique channel name to avoid conflicts
-    const channelName = `messages_${user.id}_${Date.now()}`;
-    const channel = supabase.channel(channelName);
+      channel.on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `recipient_id=eq.${user.id}`
+      }, async (payload) => {
+        console.log('📨 New message received:', payload);
+        const newMessage = payload.new as Message;
+        
+        // Get sender info
+        const { data: senderData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', newMessage.sender_id)
+          .single();
 
-    channel.on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages',
-      filter: `recipient_id=eq.${user.id}`
-    }, async (payload) => {
-      console.log('📨 New message received:', payload);
-      const newMessage = payload.new as Message;
-      
-      // Get sender info
-      const { data: senderData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', newMessage.sender_id)
-        .single();
+        if (senderData) {
+          const senderInfo: ChatUser = {
+            id: senderData.id,
+            username: senderData.username || 'Usuário',
+            full_name: senderData.username || undefined,
+            avatar_url: senderData.avatar_url || undefined,
+            email: senderData.username || undefined,
+            created_at: senderData.created_at,
+            updated_at: senderData.updated_at,
+            unread_count: 0
+          };
 
-      if (senderData) {
-        const senderInfo: ChatUser = {
-          id: senderData.id,
-          username: senderData.username || 'Usuário',
-          full_name: senderData.username || undefined,
-          avatar_url: senderData.avatar_url || undefined,
-          email: senderData.username || undefined,
-          created_at: senderData.created_at,
-          updated_at: senderData.updated_at,
-          unread_count: 0
-        };
+          // Add notification to unified system
+          unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
+        }
 
-        // Add notification to unified system
-        unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
-      }
+        // Invalidate queries to refresh UI
+        queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+        queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
+      });
 
-      // Invalidate queries to refresh UI
-      queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-      queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
-    });
-
-    // Subscribe to the channel only once
-    channel.subscribe((status) => {
-      console.log('📡 Realtime status:', status);
-      if (status === 'SUBSCRIBED') {
-        setIsConnected(true);
-        isSubscribedRef.current = true;
-        channelRef.current = channel;
-        console.log('✅ Realtime connected successfully');
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-        setIsConnected(false);
-        isSubscribedRef.current = false;
-        console.log('❌ Realtime connection closed or error');
-      }
-    });
+      // Subscribe to the channel
+      channel.subscribe((status) => {
+        console.log('📡 Realtime status:', status);
+        if (status === 'SUBSCRIBED') {
+          setIsConnected(true);
+          channelRef.current = channel;
+          console.log('✅ Realtime connected successfully');
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          setIsConnected(false);
+          console.log('❌ Realtime connection closed or error');
+        }
+      });
+    }, 100);
 
     return cleanup;
   }, [user?.id, queryClient, cleanup]);
