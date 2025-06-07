@@ -1,55 +1,99 @@
 
-import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
-import { SecuritySettings } from "@/components/settings/SecuritySettings";
-import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { AvatarSettings } from "@/components/settings/AvatarSettings";
-import { SessionsManager } from "@/components/settings/SessionsManager";
+import { UnifiedThemeSettings } from "@/components/settings/UnifiedThemeSettings";
+import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
 
 const Settings = () => {
   return (
-    <div className="w-full max-w-4xl mx-auto p-3 space-y-4">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold">Configurações</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Gerencie suas configurações e preferências
+    <div className="container mx-auto p-6 max-w-4xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Configurações</h1>
+        <p className="text-muted-foreground mt-2">
+          Gerencie suas preferências e configurações da conta.
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 text-xs">
-          <TabsTrigger value="profile" className="text-xs">Perfil</TabsTrigger>
-          <TabsTrigger value="security" className="text-xs">Segurança</TabsTrigger>
-          <TabsTrigger value="notifications" className="text-xs">Notificações</TabsTrigger>
-          <TabsTrigger value="sessions" className="text-xs">Sessões</TabsTrigger>
-          <TabsTrigger value="avatar" className="text-xs">Avatar</TabsTrigger>
-          <TabsTrigger value="theme" className="text-xs">Tema</TabsTrigger>
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
+          <TabsTrigger value="profile">Perfil</TabsTrigger>
+          <TabsTrigger value="avatar">Avatar</TabsTrigger>
+          <TabsTrigger value="theme">Tema</TabsTrigger>
+          <TabsTrigger value="security">Segurança</TabsTrigger>
+          <TabsTrigger value="notifications">Notificações</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="space-y-3">
-          <ProfileSettings />
+        <TabsContent value="profile" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações do Perfil</CardTitle>
+              <CardDescription>
+                Atualize suas informações pessoais aqui.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ProfileSettings />
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="space-y-3">
-          <SecuritySettings />
+        <TabsContent value="avatar" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Foto do Perfil</CardTitle>
+              <CardDescription>
+                Gerencie sua foto de perfil.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AvatarSettings />
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-3">
-          <NotificationSettings />
+        <TabsContent value="theme" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Personalização</CardTitle>
+              <CardDescription>
+                Escolha o tema e personalize a aparência do aplicativo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <UnifiedThemeSettings />
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="sessions" className="space-y-3">
-          <SessionsManager />
+        <TabsContent value="security" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Segurança</CardTitle>
+              <CardDescription>
+                Gerencie suas configurações de segurança e sessões.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SecuritySettings />
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="avatar" className="space-y-3">
-          <AvatarSettings />
-        </TabsContent>
-
-        <TabsContent value="theme" className="space-y-3">
-          <ThemeSettings />
+        <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notificações</CardTitle>
+              <CardDescription>
+                Configure como e quando você quer receber notificações.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NotificationSettings />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

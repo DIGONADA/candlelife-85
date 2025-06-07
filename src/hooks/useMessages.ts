@@ -1,10 +1,10 @@
-
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from './use-toast';
 import { messageKeys } from '@/lib/query-keys';
+import { unifiedNotificationService } from '@/services/unifiedNotificationService';
 import { 
   Message, 
   ChatUser, 
@@ -28,6 +28,62 @@ export const useMessages = (config: UseMessagesConfig = {}) => {
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<any>(null);
+
+  // Setup realtime listener for new messages
+  useEffect(() => {
+    if (!user || !enableRealtime) return;
+
+    const channel = supabase
+      .channel('messages_realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `recipient_id=eq.${user.id}`
+      }, async (payload) => {
+        const newMessage = payload.new as Message;
+        
+        // Get sender info
+        const { data: senderData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', newMessage.sender_id)
+          .single();
+
+        if (senderData) {
+          const senderInfo: ChatUser = {
+            id: senderData.id,
+            username: senderData.username || 'Usuário',
+            full_name: senderData.username || undefined,
+            avatar_url: senderData.avatar_url || undefined,
+            email: senderData.username || undefined,
+            created_at: senderData.created_at,
+            updated_at: senderData.updated_at,
+            unread_count: 0
+          };
+
+          // Add notification
+          unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
+        }
+
+        // Invalidate queries to refresh UI
+        queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+        if (activeConversation) {
+          queryClient.invalidateQueries({ queryKey: messageKeys.conversation(activeConversation) });
+        }
+      })
+      .subscribe();
+
+    setIsConnected(true);
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        setIsConnected(false);
+      }
+    };
+  }, [user, enableRealtime, activeConversation, queryClient]);
 
   // Get chat users with simplified query
   const useChatUsers = () => {

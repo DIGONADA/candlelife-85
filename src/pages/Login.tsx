@@ -23,13 +23,19 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
-      <div className="w-full max-w-md p-4 animate-fade-in">
-        <Card className="rounded-2xl border-0 shadow-xl backdrop-blur-lg bg-white/90 dark:bg-gray-950/90">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/50 to-secondary/20 p-4">
+      <div className="w-full max-w-md animate-fade-in">
+        <Card className="border shadow-xl bg-card/95 backdrop-blur-sm">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-3xl font-bold text-foreground">
               {isSignUp ? "Criar conta" : "Entrar"}
             </CardTitle>
+            <p className="text-muted-foreground">
+              {isSignUp 
+                ? "Crie sua conta para começar" 
+                : "Entre em sua conta para continuar"
+              }
+            </p>
           </CardHeader>
           <CardContent>
             {isSignUp ? (
