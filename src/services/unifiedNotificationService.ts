@@ -1,5 +1,6 @@
+
 import { Message, ChatUser } from '@/types/messages';
-import { notificationSoundService } from './notificationSound';
+import { enhancedNotificationSoundService } from './enhancedNotificationSound';
 
 export interface UnifiedNotificationData {
   id: string;
@@ -69,7 +70,7 @@ class UnifiedNotificationService {
 
     this.notifications.unshift(newNotification);
     
-    // Keep only last 100 notifications
+    // Manter apenas as últimas 100 notificações
     if (this.notifications.length > 100) {
       this.notifications = this.notifications.slice(0, 100);
     }
@@ -81,7 +82,10 @@ class UnifiedNotificationService {
   }
 
   addMessageNotification(message: Message, senderInfo: ChatUser) {
-    console.log('🔔 Adding message notification:', { message: message.content.substring(0, 50), sender: senderInfo.username });
+    console.log('🔔 Adding message notification:', { 
+      message: message.content.substring(0, 50), 
+      sender: senderInfo.username 
+    });
     
     this.addNotification({
       type: 'message',
@@ -163,6 +167,7 @@ class UnifiedNotificationService {
           icon: notification.avatar || '/favicon.ico',
           badge: '/favicon.ico',
           tag: notification.type,
+          requireInteraction: false,
         });
 
         systemNotification.onclick = () => {
@@ -177,20 +182,25 @@ class UnifiedNotificationService {
     }
   }
 
-  private playSound() {
+  private async playSound() {
     if (!this.soundEnabled) return;
     
-    console.log('🔊 Playing notification sound');
-    notificationSoundService.play();
+    console.log('🔊 Playing enhanced notification sound');
+    await enhancedNotificationSoundService.play();
   }
 
   setSoundEnabled(enabled: boolean) {
     this.soundEnabled = enabled;
-    notificationSoundService.setEnabled(enabled);
+    enhancedNotificationSoundService.setEnabled(enabled);
   }
 
   setPushEnabled(enabled: boolean) {
     this.pushEnabled = enabled;
+  }
+
+  // Método para testar som
+  async testSound() {
+    await enhancedNotificationSoundService.testSound();
   }
 }
 
