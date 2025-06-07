@@ -154,15 +154,4 @@ export const GlobalNotificationCenter = () => {
       </PopoverContent>
     </Popover>
   );
-
-  function getNotificationIcon(type: string) {
-    switch (type) {
-      case 'message':
-        return <MessageSquare className="h-4 w-4" />;
-      case 'transaction':
-        return <DollarSign className="h-4 w-4" />;
-      default:
-        return <Settings className="h-4 w-4" />;
-    }
-  }
 };
