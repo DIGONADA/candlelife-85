@@ -15,6 +15,7 @@ class ChatSubscriptionManager {
   private cleanupTimeout: any = null;
   private isSubscribing = false;
   private channelName: string | null = null;
+  private subscriptionPromise: Promise<void> | null = null;
 
   static getInstance(): ChatSubscriptionManager {
     if (!ChatSubscriptionManager.instance) {
@@ -30,59 +31,53 @@ class ChatSubscriptionManager {
   subscribe(userId: string): boolean {
     console.log('🔄 ChatSubscriptionManager: subscribe called for user:', userId);
     
-    // Prevent multiple concurrent subscriptions
-    if (this.isSubscribing) {
-      console.log('⏳ Already subscribing, skipping...');
-      return false;
+    // If we're already subscribing for this user, just increment counter
+    if (this.subscriptionPromise && this.currentUserId === userId) {
+      this.subscriberCount++;
+      console.log('⏳ Subscription in progress, incrementing counter');
+      return true;
     }
     
-    this.subscriberCount++;
-    
     // If already subscribed for this user, just increment counter
-    if (this.isActive && this.currentUserId === userId && this.channel) {
+    if (this.isActive && this.currentUserId === userId && this.channel && !this.isSubscribing) {
+      this.subscriberCount++;
       console.log('✅ Already subscribed for this user, incrementing counter');
       return true;
     }
 
-    // Clean up any existing subscription first
-    this.forceCleanup();
-
-    // Clear any pending cleanup
-    if (this.cleanupTimeout) {
-      clearTimeout(this.cleanupTimeout);
-      this.cleanupTimeout = null;
-    }
-
-    // Create new subscription
-    this.createSubscription(userId);
+    // Start new subscription
+    this.subscriberCount++;
+    this.subscriptionPromise = this.createSubscriptionSafely(userId);
     return true;
   }
 
-  private createSubscription(userId: string) {
+  private async createSubscriptionSafely(userId: string): Promise<void> {
+    // Prevent concurrent subscriptions
     if (this.isSubscribing) {
+      console.log('⏳ Already creating subscription, waiting...');
       return;
     }
 
     this.isSubscribing = true;
     
     try {
+      // Force cleanup any existing subscription
+      await this.forceCleanupInternal();
+
+      // Clear any pending cleanup
+      if (this.cleanupTimeout) {
+        clearTimeout(this.cleanupTimeout);
+        this.cleanupTimeout = null;
+      }
+
       console.log('🔄 Creating new subscription for user:', userId);
       
-      // Generate unique channel name to avoid conflicts
+      // Generate unique channel name
       this.channelName = `chat_messages_${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Make sure any existing channel is completely removed
-      if (this.channel) {
-        try {
-          this.channel.unsubscribe();
-          supabase.removeChannel(this.channel);
-        } catch (error) {
-          console.warn('Warning cleaning up old channel:', error);
-        }
-      }
-      
-      this.channel = supabase.channel(this.channelName);
       this.currentUserId = userId;
+
+      // Create new channel
+      this.channel = supabase.channel(this.channelName);
 
       // Add postgres changes listener
       this.channel.on('postgres_changes', {
@@ -92,30 +87,56 @@ class ChatSubscriptionManager {
         filter: `recipient_id=eq.${userId}`
       }, this.handleMessage.bind(this));
 
-      // Subscribe with status handling
-      this.channel.subscribe((status: string) => {
-        console.log('📡 Subscription status:', status, 'for channel:', this.channelName);
-        if (status === 'SUBSCRIBED') {
-          this.isActive = true;
-          this.isSubscribing = false;
-          console.log('✅ Chat subscription active for channel:', this.channelName);
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.log('❌ Subscription error:', status, 'for channel:', this.channelName);
-          this.isActive = false;
-          this.isSubscribing = false;
-          
-          // Only cleanup if this is our current channel
-          if (this.channel && this.channel.topic === this.channelName) {
-            this.channel = null;
-            this.channelName = null;
+      // Subscribe with promise-based handling
+      const subscriptionPromise = new Promise<void>((resolve, reject) => {
+        let resolved = false;
+        
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error('Subscription timeout'));
           }
-        }
+        }, 10000); // 10 second timeout
+
+        this.channel.subscribe((status: string) => {
+          console.log('📡 Subscription status:', status, 'for channel:', this.channelName);
+          
+          if (resolved) return;
+          
+          if (status === 'SUBSCRIBED') {
+            resolved = true;
+            clearTimeout(timeout);
+            this.isActive = true;
+            this.isSubscribing = false;
+            console.log('✅ Chat subscription active for channel:', this.channelName);
+            resolve();
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            resolved = true;
+            clearTimeout(timeout);
+            console.log('❌ Subscription error:', status, 'for channel:', this.channelName);
+            this.isActive = false;
+            this.isSubscribing = false;
+            
+            // Only cleanup if this is our current channel
+            if (this.channel && this.channel.topic === this.channelName) {
+              this.channel = null;
+              this.channelName = null;
+            }
+            reject(new Error(`Subscription failed: ${status}`));
+          }
+        });
       });
+
+      await subscriptionPromise;
 
     } catch (error) {
       console.error('❌ Error creating subscription:', error);
       this.isSubscribing = false;
-      this.forceCleanup();
+      this.isActive = false;
+      await this.forceCleanupInternal();
+      throw error;
+    } finally {
+      this.subscriptionPromise = null;
     }
   }
 
@@ -188,6 +209,10 @@ class ChatSubscriptionManager {
   }
 
   forceCleanup() {
+    this.forceCleanupInternal();
+  }
+
+  private async forceCleanupInternal() {
     console.log('🧹 Force cleaning up chat subscription');
     
     if (this.channel) {
@@ -207,6 +232,7 @@ class ChatSubscriptionManager {
     this.isActive = false;
     this.isSubscribing = false;
     this.subscriberCount = 0;
+    this.subscriptionPromise = null;
     
     if (this.cleanupTimeout) {
       clearTimeout(this.cleanupTimeout);

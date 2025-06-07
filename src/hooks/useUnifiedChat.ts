@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,19 +20,18 @@ export const useUnifiedChat = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const mountedRef = useRef(true);
-  const hasSetupRef = useRef(false);
-  const subscriptionSetupRef = useRef(false);
+  const initializationRef = useRef(false);
 
-  // Setup chat subscription only once
+  // Setup chat subscription only once per user
   useEffect(() => {
-    if (!user?.id || subscriptionSetupRef.current) {
+    if (!user?.id || initializationRef.current) {
       return;
     }
 
     mountedRef.current = true;
-    subscriptionSetupRef.current = true;
+    initializationRef.current = true;
     
-    console.log('🔄 Setting up chat for user:', user.id);
+    console.log('🔄 Setting up unified chat for user:', user.id);
     
     // Set query client in manager
     chatSubscriptionManager.setQueryClient(queryClient);
@@ -49,18 +49,18 @@ export const useUnifiedChat = () => {
     }, 2000);
 
     return () => {
+      console.log('🔄 Cleaning up unified chat');
       mountedRef.current = false;
-      subscriptionSetupRef.current = false;
+      initializationRef.current = false;
       clearInterval(statusInterval);
       chatSubscriptionManager.unsubscribe();
     };
   }, [user?.id, queryClient]);
 
-  // Cleanup on unmount
+  // Final cleanup on unmount
   useEffect(() => {
     return () => {
       mountedRef.current = false;
-      subscriptionSetupRef.current = false;
     };
   }, []);
 
