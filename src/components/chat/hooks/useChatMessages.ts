@@ -1,11 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { useMessagesContext } from "@/context/MessagesContext";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useTypingIndicator } from "@/hooks/messages/useTypingIndicator";
-import { useUnifiedChat } from "@/hooks/useUnifiedChat";
-import { Message } from "@/types/messages";
 
 interface UseChatMessagesProps {
   recipientId: string;
@@ -21,14 +18,13 @@ export const useChatMessages = ({ recipientId, isOpen }: UseChatMessagesProps) =
   const {
     sendMessage,
     clearConversation,
-    deleteConversation,
-    setActiveConversation
+    setActiveConversation,
+    useConversation
   } = useMessagesContext();
 
-  const { useConversation } = useUnifiedChat();
   const { sendTypingStatus, isUserTyping } = useTypingIndicator();
   
-  // Use the conversation hook directly from unified chat
+  // Use the conversation hook from context
   const conversationQuery = useConversation(recipientId, searchQuery);
   const messages = conversationQuery.data || [];
   const isLoading = conversationQuery.isLoading;

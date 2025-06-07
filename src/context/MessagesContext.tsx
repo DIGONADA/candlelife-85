@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useUnifiedChat } from '@/hooks/useUnifiedChat';
@@ -22,6 +21,9 @@ interface MessagesContextType {
   chatUsers: ChatUser[];
   isLoadingChatUsers: boolean;
   getTotalUnreadCount: () => number;
+  
+  // Add conversation hook for components to use
+  useConversation: (otherUserId: string, searchTerm?: string) => any;
 }
 
 const MessagesContext = createContext<MessagesContextType | undefined>(undefined);
@@ -36,6 +38,7 @@ export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     activeConversation,
     setActiveConversation,
     useChatUsers,
+    useConversation,
     useSendMessage,
     useMarkAsRead,
     useClearConversation,
@@ -137,7 +140,8 @@ export const MessagesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       deleteConversation: deleteConversationAction,
       chatUsers,
       isLoadingChatUsers,
-      getTotalUnreadCount
+      getTotalUnreadCount,
+      useConversation
     }}>
       {children}
     </MessagesContext.Provider>
