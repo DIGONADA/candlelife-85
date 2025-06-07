@@ -13,8 +13,7 @@ class ChatSubscriptionManager {
   private queryClient: any = null;
   private subscriberCount = 0;
   private cleanupTimeout: any = null;
-  private debounceTimeout: any = null;
-  private lastSubscriptionTime = 0;
+  private isSubscribing = false;
 
   static getInstance(): ChatSubscriptionManager {
     if (!ChatSubscriptionManager.instance) {
@@ -28,15 +27,13 @@ class ChatSubscriptionManager {
   }
 
   subscribe(userId: string): boolean {
-    // Prevent rapid re-subscriptions
-    const now = Date.now();
-    if (now - this.lastSubscriptionTime < 1000) {
-      console.log('🔄 Subscription debounced, too soon after last attempt');
+    console.log('🔄 ChatSubscriptionManager: subscribe called for user:', userId);
+    
+    // Prevent multiple concurrent subscriptions
+    if (this.isSubscribing) {
+      console.log('⏳ Already subscribing, skipping...');
       return false;
     }
-    this.lastSubscriptionTime = now;
-
-    console.log('🔄 ChatSubscriptionManager: subscribe called for user:', userId);
     
     this.subscriberCount++;
     
@@ -46,8 +43,8 @@ class ChatSubscriptionManager {
       return true;
     }
 
-    // Clean up any existing subscription
-    this.cleanup();
+    // Clean up any existing subscription first
+    this.forceCleanup();
 
     // Clear any pending cleanup
     if (this.cleanupTimeout) {
@@ -55,23 +52,22 @@ class ChatSubscriptionManager {
       this.cleanupTimeout = null;
     }
 
-    // Debounce subscription creation
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
-    }
-
-    this.debounceTimeout = setTimeout(() => {
-      this.createSubscription(userId);
-    }, 100);
-
+    // Create new subscription
+    this.createSubscription(userId);
     return true;
   }
 
   private createSubscription(userId: string) {
+    if (this.isSubscribing) {
+      return;
+    }
+
+    this.isSubscribing = true;
+    
     try {
       console.log('🔄 Creating new subscription for user:', userId);
       
-      const channelName = `chat_${userId}_${Date.now()}`;
+      const channelName = `chat_messages_${userId}_${Date.now()}`;
       this.channel = supabase.channel(channelName);
       this.currentUserId = userId;
 
@@ -88,16 +84,19 @@ class ChatSubscriptionManager {
         console.log('📡 Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           this.isActive = true;
+          this.isSubscribing = false;
           console.log('✅ Chat subscription active');
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.log('❌ Subscription error:', status);
           this.isActive = false;
+          this.isSubscribing = false;
         }
       });
 
     } catch (error) {
       console.error('❌ Error creating subscription:', error);
-      this.cleanup();
+      this.isSubscribing = false;
+      this.forceCleanup();
     }
   }
 
@@ -113,9 +112,9 @@ class ChatSubscriptionManager {
       // Delay cleanup to prevent immediate re-subscription issues
       this.cleanupTimeout = setTimeout(() => {
         if (this.subscriberCount === 0) {
-          this.cleanup();
+          this.forceCleanup();
         }
-      }, 2000);
+      }, 1000);
     }
   }
 
@@ -158,13 +157,10 @@ class ChatSubscriptionManager {
         // Add notification
         unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
 
-        // Invalidate queries with debounce
+        // Invalidate queries
         if (this.queryClient) {
-          clearTimeout(this.debounceTimeout);
-          this.debounceTimeout = setTimeout(() => {
-            this.queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-            this.queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
-          }, 300);
+          this.queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+          this.queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
         }
       }
     } catch (error) {
@@ -172,10 +168,12 @@ class ChatSubscriptionManager {
     }
   }
 
-  private cleanup() {
+  forceCleanup() {
+    console.log('🧹 Force cleaning up chat subscription');
+    
     if (this.channel) {
-      console.log('🧹 Cleaning up chat subscription');
       try {
+        // Properly unsubscribe and remove channel
         this.channel.unsubscribe();
         supabase.removeChannel(this.channel);
       } catch (error) {
@@ -186,30 +184,21 @@ class ChatSubscriptionManager {
     this.channel = null;
     this.currentUserId = null;
     this.isActive = false;
+    this.isSubscribing = false;
+    this.subscriberCount = 0;
     
     if (this.cleanupTimeout) {
       clearTimeout(this.cleanupTimeout);
       this.cleanupTimeout = null;
     }
-
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = null;
-    }
   }
 
   isConnected(): boolean {
-    return this.isActive && this.channel !== null;
+    return this.isActive && this.channel !== null && !this.isSubscribing;
   }
 
   getCurrentUserId(): string | null {
     return this.currentUserId;
-  }
-
-  forceCleanup() {
-    console.log('🚨 Force cleanup called');
-    this.subscriberCount = 0;
-    this.cleanup();
   }
 }
 

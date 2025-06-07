@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,35 +19,37 @@ export const useUnifiedChat = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const hasSetupRef = useRef(false);
 
-  // Setup chat subscription
+  // Setup chat subscription only once
   useEffect(() => {
-    mountedRef.current = true;
-    
-    if (!user?.id) {
-      setIsConnected(false);
+    if (!user?.id || hasSetupRef.current) {
       return;
     }
 
+    mountedRef.current = true;
+    hasSetupRef.current = true;
+    
     console.log('🔄 Setting up chat for user:', user.id);
     
     // Set query client in manager
     chatSubscriptionManager.setQueryClient(queryClient);
     
     // Subscribe to chat
-    const subscribed = chatSubscriptionManager.subscribe(user.id);
+    chatSubscriptionManager.subscribe(user.id);
     
-    // Check connection status
+    // Check connection status periodically
     const statusInterval = setInterval(() => {
       if (mountedRef.current) {
         const connected = chatSubscriptionManager.isConnected() && 
                          chatSubscriptionManager.getCurrentUserId() === user.id;
         setIsConnected(connected);
       }
-    }, 1000);
+    }, 2000);
 
     return () => {
       mountedRef.current = false;
+      hasSetupRef.current = false;
       clearInterval(statusInterval);
       chatSubscriptionManager.unsubscribe();
     };
