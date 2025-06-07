@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -15,7 +16,7 @@ import { AttachmentSelector } from "@/components/chat/AttachmentSelector";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNative } from "@/hooks/useNative";
 import { useUserPresence } from "@/hooks/useUserPresence";
-import { notificationService } from "@/services/notificationService";
+import { unifiedNotificationService } from "@/services/unifiedNotificationService";
 import {
   DropdownMenu,
   DropdownMenuContent,

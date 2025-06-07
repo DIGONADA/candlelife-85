@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Bell, X, MessageSquare, DollarSign, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { notificationService, NotificationData } from "@/services/notificationService";
+import { unifiedNotificationService, NotificationData } from "@/services/unifiedNotificationService";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
@@ -21,14 +20,14 @@ export const GlobalNotificationCenter = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = notificationService.subscribe(setNotifications);
+    const unsubscribe = unifiedNotificationService.subscribe(setNotifications);
     return unsubscribe;
   }, []);
 
-  const unreadCount = notificationService.getUnreadCount();
+  const unreadCount = unifiedNotificationService.getUnreadCount();
 
   const handleNotificationClick = (notification: NotificationData) => {
-    notificationService.markAsRead(notification.id);
+    unifiedNotificationService.markAsRead(notification.id);
     
     if (notification.type === 'message' && notification.conversationId) {
       navigate(`/chat/${notification.conversationId}`);
@@ -38,11 +37,11 @@ export const GlobalNotificationCenter = () => {
   };
 
   const handleMarkAllAsRead = () => {
-    notificationService.markAllAsRead();
+    unifiedNotificationService.markAllAsRead();
   };
 
   const handleClearAll = () => {
-    notificationService.clearAll();
+    unifiedNotificationService.clearAll();
   };
 
   const getNotificationIcon = (type: string) => {
@@ -129,7 +128,7 @@ export const GlobalNotificationCenter = () => {
                           className="h-6 w-6 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            notificationService.removeNotification(notification.id);
+                            unifiedNotificationService.removeNotification(notification.id);
                           }}
                         >
                           <X className="h-3 w-3" />
