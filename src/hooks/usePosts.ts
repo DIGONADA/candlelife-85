@@ -43,28 +43,31 @@ export const usePosts = () => {
     }
   }, [postsError, toast]);
 
-  // Usar o novo hook para subscription robusta
+  // Usar o hook de subscription para posts
   useRealtimeSubscription({
-    channelName: 'posts-realtime',
-    filters: [
-      {
-        event: '*',
-        schema: 'public',
-        table: 'posts'
-      },
-      {
-        event: '*',
-        schema: 'public',
-        table: 'comments'
-      },
-      {
-        event: '*',
-        schema: 'public',
-        table: 'reactions'
-      }
-    ],
-    onSubscriptionChange: () => {
-      // Invalidar a query de posts quando houver mudanças
+    tableName: 'posts',
+    onDataChange: () => {
+      console.log("📢 Posts change detected");
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    dependencies: [user?.id]
+  });
+
+  // Usar o hook de subscription para comentários
+  useRealtimeSubscription({
+    tableName: 'comments',
+    onDataChange: () => {
+      console.log("📢 Comments change detected");
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    dependencies: [user?.id]
+  });
+
+  // Usar o hook de subscription para reações
+  useRealtimeSubscription({
+    tableName: 'reactions',
+    onDataChange: () => {
+      console.log("📢 Reactions change detected");
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
     dependencies: [user?.id]

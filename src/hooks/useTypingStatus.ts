@@ -10,17 +10,27 @@ export const useTypingStatus = () => {
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const typingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
-  // Usar o novo hook para subscription robusta
+  // Usar o hook de subscription para typing status
   useRealtimeSubscription({
-    channelName: 'typing-status-updates',
-    filters: [
-      {
-        event: '*',
-        schema: 'public',
-        table: 'typing_status'
-      }
-    ],
-    onSubscriptionChange: (payload) => {
+    tableName: 'typing_status',
+    onDataChange: () => {
+      console.log("📢 Typing status change detected");
+      // A lógica de atualização será feita via subscription direta
+    },
+    dependencies: [user?.id]
+  });
+
+  // Setup direct subscription for typing status with custom logic
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase.channel(`typing_status_${user.id}`);
+
+    channel.on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'typing_status'
+    }, (payload) => {
       const typingStatus = payload.new as TypingStatus;
       
       if (typingStatus && typingStatus.conversation_with_user_id === user?.id) {
@@ -45,9 +55,14 @@ export const useTypingStatus = () => {
           }, 5000);
         }
       }
-    },
-    dependencies: [user?.id]
-  });
+    });
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // Enviar status de digitação
   const sendTypingStatus = async (conversationWithUserId: string, isTyping: boolean) => {
