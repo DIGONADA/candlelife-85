@@ -164,6 +164,21 @@ export const useSimpleMessages = () => {
                 .limit(1)
                 .single();
 
+              // Convert database message to Message type
+              const lastMessage: Message | undefined = lastMessageData ? {
+                id: lastMessageData.id,
+                content: lastMessageData.content,
+                sender_id: lastMessageData.sender_id,
+                recipient_id: lastMessageData.recipient_id,
+                created_at: lastMessageData.created_at,
+                read: lastMessageData.read || false,
+                message_status: lastMessageData.message_status || MessageStatus.SENT,
+                message_type: MessageType.TEXT,
+                attachment_url: lastMessageData.attachment_url,
+                deleted_by_recipient: lastMessageData.deleted_by_recipient || false,
+                reactions: []
+              } : undefined;
+
               return {
                 id: profile.id,
                 username: profile.username || 'Usuário',
@@ -173,7 +188,7 @@ export const useSimpleMessages = () => {
                 created_at: profile.created_at || new Date().toISOString(),
                 updated_at: profile.updated_at || new Date().toISOString(),
                 unread_count: count || 0,
-                last_message: lastMessageData || undefined
+                last_message: lastMessage
               };
             })
           );

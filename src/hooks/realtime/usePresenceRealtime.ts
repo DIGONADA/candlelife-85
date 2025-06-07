@@ -1,59 +1,29 @@
 
-import { useEffect, useRef } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { realtimeManager } from '@/services/RealtimeManager';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 
 export const usePresenceRealtime = () => {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const cleanupRef = useRef<(() => void) | null>(null);
-  const subscriberIdRef = useRef(`presence-${Math.random().toString(36).substr(2, 9)}`);
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!user?.id) {
-      console.log('❌ usePresenceRealtime: No user ID');
-      return;
-    }
+    if (!user) return;
 
-    console.log('👤 usePresenceRealtime: Setting up subscription');
-
-    const cleanup = realtimeManager.subscribe(
-      {
-        channelName: 'presence-realtime',
-        filters: [
-          {
-            event: '*',
-            schema: 'public',
-            table: 'user_presence'
-          },
-          {
-            event: '*',
-            schema: 'public',
-            table: 'typing_status'
-          }
-        ],
-        onSubscriptionChange: () => {
-          console.log('👤 Presence/Typing change detected');
-          // Invalidate presence-related queries
-          queryClient.invalidateQueries({ queryKey: ['user-presence'] });
-          queryClient.invalidateQueries({ queryKey: ['typing-status'] });
-        }
-      },
-      subscriberIdRef.current
-    );
-
-    cleanupRef.current = cleanup;
+    const channel = supabase
+      .channel('presence_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'user_presence'
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['presence'] });
+      })
+      .subscribe();
 
     return () => {
-      console.log('🧹 usePresenceRealtime: Cleaning up');
-      if (cleanupRef.current) {
-        cleanupRef.current();
-      }
+      supabase.removeChannel(channel);
     };
-  }, [user?.id, queryClient]);
-
-  return {
-    isSubscribed: cleanupRef.current !== null
-  };
+  }, [user, queryClient]);
 };
