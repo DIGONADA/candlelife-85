@@ -1,60 +1,44 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProfileSettings } from "@/components/settings/ProfileSettings";
-import { AvatarSettings } from "@/components/settings/AvatarSettings";
+import { UnifiedProfileSettings } from "@/components/settings/UnifiedProfileSettings";
 import { UnifiedThemeSettings } from "@/components/settings/UnifiedThemeSettings";
 import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
 
 const Settings = () => {
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Configurações</h1>
+    <div className="container mx-auto p-4 md:p-6 max-w-5xl">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold">Configurações</h1>
         <p className="text-muted-foreground mt-2">
           Gerencie suas preferências e configurações da conta.
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
-          <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="avatar">Avatar</TabsTrigger>
-          <TabsTrigger value="theme">Tema</TabsTrigger>
-          <TabsTrigger value="security">Segurança</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
+      <Tabs defaultValue="profile" className="space-y-4 md:space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
+          <TabsTrigger value="profile" className="text-xs md:text-sm">Perfil</TabsTrigger>
+          <TabsTrigger value="theme" className="text-xs md:text-sm">Tema</TabsTrigger>
+          <TabsTrigger value="security" className="text-xs md:text-sm">Segurança</TabsTrigger>
+          <TabsTrigger value="notifications" className="text-xs md:text-sm">Notificações</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="space-y-6">
+        <TabsContent value="profile" className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Informações do Perfil</CardTitle>
+              <CardTitle>Perfil e Avatar</CardTitle>
               <CardDescription>
-                Atualize suas informações pessoais aqui.
+                Gerencie suas informações pessoais e foto de perfil.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ProfileSettings />
+              <UnifiedProfileSettings />
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="avatar" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Foto do Perfil</CardTitle>
-              <CardDescription>
-                Gerencie sua foto de perfil.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AvatarSettings />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="theme" className="space-y-6">
+        <TabsContent value="theme" className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Personalização</CardTitle>
@@ -68,21 +52,11 @@ const Settings = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Segurança</CardTitle>
-              <CardDescription>
-                Gerencie suas configurações de segurança e sessões.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SecuritySettings />
-            </CardContent>
-          </Card>
+        <TabsContent value="security" className="space-y-4 md:space-y-6">
+          <SecuritySettings />
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-6">
+        <TabsContent value="notifications" className="space-y-4 md:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Notificações</CardTitle>

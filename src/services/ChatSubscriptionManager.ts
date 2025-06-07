@@ -1,6 +1,5 @@
 
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
 import { messageKeys } from '@/lib/query-keys';
 import { unifiedNotificationService } from '@/services/unifiedNotificationService';
 import { enhancedNotificationSoundService } from '@/services/enhancedNotificationSound';
@@ -14,6 +13,8 @@ class ChatSubscriptionManager {
   private queryClient: any = null;
   private subscriberCount = 0;
   private cleanupTimeout: any = null;
+  private debounceTimeout: any = null;
+  private lastSubscriptionTime = 0;
 
   static getInstance(): ChatSubscriptionManager {
     if (!ChatSubscriptionManager.instance) {
@@ -27,12 +28,20 @@ class ChatSubscriptionManager {
   }
 
   subscribe(userId: string): boolean {
+    // Prevent rapid re-subscriptions
+    const now = Date.now();
+    if (now - this.lastSubscriptionTime < 1000) {
+      console.log('🔄 Subscription debounced, too soon after last attempt');
+      return false;
+    }
+    this.lastSubscriptionTime = now;
+
     console.log('🔄 ChatSubscriptionManager: subscribe called for user:', userId);
     
     this.subscriberCount++;
     
     // If already subscribed for this user, just increment counter
-    if (this.isActive && this.currentUserId === userId) {
+    if (this.isActive && this.currentUserId === userId && this.channel) {
       console.log('✅ Already subscribed for this user, incrementing counter');
       return true;
     }
@@ -46,10 +55,23 @@ class ChatSubscriptionManager {
       this.cleanupTimeout = null;
     }
 
+    // Debounce subscription creation
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+    }
+
+    this.debounceTimeout = setTimeout(() => {
+      this.createSubscription(userId);
+    }, 100);
+
+    return true;
+  }
+
+  private createSubscription(userId: string) {
     try {
       console.log('🔄 Creating new subscription for user:', userId);
       
-      const channelName = `unified_chat_${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const channelName = `chat_${userId}_${Date.now()}`;
       this.channel = supabase.channel(channelName);
       this.currentUserId = userId;
 
@@ -70,23 +92,12 @@ class ChatSubscriptionManager {
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.log('❌ Subscription error:', status);
           this.isActive = false;
-          
-          // Retry if there are still subscribers
-          if (this.subscriberCount > 0) {
-            setTimeout(() => {
-              if (this.subscriberCount > 0 && this.currentUserId) {
-                this.subscribe(this.currentUserId);
-              }
-            }, 2000);
-          }
         }
       });
 
-      return true;
     } catch (error) {
       console.error('❌ Error creating subscription:', error);
       this.cleanup();
-      return false;
     }
   }
 
@@ -104,7 +115,7 @@ class ChatSubscriptionManager {
         if (this.subscriberCount === 0) {
           this.cleanup();
         }
-      }, 1000);
+      }, 2000);
     }
   }
 
@@ -113,12 +124,17 @@ class ChatSubscriptionManager {
     const newMessage = payload.new as Message;
     
     try {
-      // Get sender info
-      const { data: senderData } = await supabase
+      // Get sender info with error handling
+      const { data: senderData, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', newMessage.sender_id)
         .single();
+
+      if (error) {
+        console.warn('⚠️ Could not fetch sender profile:', error);
+        return;
+      }
 
       if (senderData) {
         const senderInfo: ChatUser = {
@@ -132,17 +148,23 @@ class ChatSubscriptionManager {
           unread_count: 0
         };
 
-        // Play notification sound
-        console.log('🔊 Playing notification sound');
-        await enhancedNotificationSoundService.play();
+        // Play notification sound (with error handling)
+        try {
+          await enhancedNotificationSoundService.play();
+        } catch (soundError) {
+          console.warn('⚠️ Could not play notification sound:', soundError);
+        }
 
         // Add notification
         unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
 
-        // Invalidate queries
+        // Invalidate queries with debounce
         if (this.queryClient) {
-          this.queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
-          this.queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
+          clearTimeout(this.debounceTimeout);
+          this.debounceTimeout = setTimeout(() => {
+            this.queryClient.invalidateQueries({ queryKey: messageKeys.chatUsers() });
+            this.queryClient.invalidateQueries({ queryKey: messageKeys.conversation(newMessage.sender_id) });
+          }, 300);
         }
       }
     } catch (error) {
@@ -151,7 +173,7 @@ class ChatSubscriptionManager {
   }
 
   private cleanup() {
-    if (this.channel && this.isActive) {
+    if (this.channel) {
       console.log('🧹 Cleaning up chat subscription');
       try {
         this.channel.unsubscribe();
@@ -169,17 +191,21 @@ class ChatSubscriptionManager {
       clearTimeout(this.cleanupTimeout);
       this.cleanupTimeout = null;
     }
+
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+      this.debounceTimeout = null;
+    }
   }
 
   isConnected(): boolean {
-    return this.isActive;
+    return this.isActive && this.channel !== null;
   }
 
   getCurrentUserId(): string | null {
     return this.currentUserId;
   }
 
-  // Force cleanup - for emergency situations
   forceCleanup() {
     console.log('🚨 Force cleanup called');
     this.subscriberCount = 0;
