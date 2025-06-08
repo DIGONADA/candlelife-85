@@ -155,8 +155,8 @@ class NotificationService {
         const event = new CustomEvent('openChat', {
           detail: { 
             userId: message.sender_id,
-            userName: senderInfo.username || senderInfo.display_name || 'Usuário',
-            userAvatar: senderInfo.avatar_url || senderInfo.profile_picture_url
+            userName: senderInfo.username || senderInfo.full_name || 'Usuário',
+            userAvatar: senderInfo.avatar_url
           }
         });
         window.dispatchEvent(event);
@@ -170,7 +170,7 @@ class NotificationService {
 
   async handleNewMessage(message: Message, senderInfo: ChatUser): Promise<void> {
     console.log('🔔 Processing new message notification:', {
-      sender: senderInfo.username || senderInfo.display_name,
+      sender: senderInfo.username || senderInfo.full_name,
       senderId: message.sender_id,
       isUserInChat: this.isUserInChat,
       currentChatUserId: this.currentChatUserId,
