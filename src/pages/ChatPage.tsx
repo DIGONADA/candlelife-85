@@ -12,13 +12,34 @@ const ChatPage = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   
+  // Add error handling for context
+  let messagesContext;
+  try {
+    messagesContext = useMessagesContext();
+  } catch (error) {
+    console.error('MessagesContext not available:', error);
+    return (
+      <div className="flex flex-col h-full items-center justify-center p-6">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold mb-2">Erro de Conexão</h2>
+          <p className="text-muted-foreground mb-4">
+            Não foi possível conectar ao sistema de mensagens.
+          </p>
+          <Button onClick={() => navigate('/dashboard')}>
+            Voltar ao Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const { 
     chatUsers,
     isLoadingChatUsers,
     getTotalUnreadCount,
     clearConversation,
     deleteConversation
-  } = useMessagesContext();
+  } = messagesContext;
 
   const filteredUsers = chatUsers.filter(user =>
     user.username.toLowerCase().includes(searchQuery.toLowerCase())
