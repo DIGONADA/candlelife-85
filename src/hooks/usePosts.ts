@@ -43,31 +43,11 @@ export const usePosts = () => {
     }
   }, [postsError, toast]);
 
-  // Usar o hook de subscription para posts
+  // Use a single subscription for posts (which will handle all social feed changes)
   useRealtimeSubscription({
     tableName: 'posts',
     onDataChange: () => {
-      console.log("📢 Posts change detected");
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-    },
-    dependencies: [user?.id]
-  });
-
-  // Usar o hook de subscription para comentários
-  useRealtimeSubscription({
-    tableName: 'comments',
-    onDataChange: () => {
-      console.log("📢 Comments change detected");
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-    },
-    dependencies: [user?.id]
-  });
-
-  // Usar o hook de subscription para reações
-  useRealtimeSubscription({
-    tableName: 'reactions',
-    onDataChange: () => {
-      console.log("📢 Reactions change detected");
+      console.log("📢 Social feed changes detected");
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
     dependencies: [user?.id]

@@ -10,6 +10,9 @@ interface SubscriptionConfig {
   dependencies?: any[];
 }
 
+// Global map to track active subscriptions
+const activeSubscriptions = new Map<string, { channel: any; subscribers: number }>();
+
 export const useRealtimeSubscription = ({
   tableName,
   onDataChange,
@@ -17,26 +20,34 @@ export const useRealtimeSubscription = ({
 }: SubscriptionConfig) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const channelRef = useRef<any>(null);
+  const subscriptionKeyRef = useRef<string | null>(null);
   const isSubscribedRef = useRef(false);
-  const subscriptionIdRef = useRef<string | null>(null);
 
   const cleanup = useCallback(() => {
-    if (channelRef.current && isSubscribedRef.current) {
-      console.log(`🧹 Cleaning up ${tableName} subscription`);
-      try {
-        const channel = channelRef.current;
-        channel.unsubscribe();
-        supabase.removeChannel(channel);
-      } catch (error) {
-        console.warn(`Warning during ${tableName} cleanup:`, error);
-      } finally {
-        channelRef.current = null;
-        isSubscribedRef.current = false;
-        subscriptionIdRef.current = null;
+    if (subscriptionKeyRef.current && isSubscribedRef.current) {
+      const key = subscriptionKeyRef.current;
+      const subscription = activeSubscriptions.get(key);
+      
+      if (subscription) {
+        subscription.subscribers--;
+        console.log(`🔄 Decreasing subscribers for ${key}: ${subscription.subscribers}`);
+        
+        if (subscription.subscribers <= 0) {
+          console.log(`🧹 Cleaning up subscription for ${key}`);
+          try {
+            subscription.channel.unsubscribe();
+            supabase.removeChannel(subscription.channel);
+          } catch (error) {
+            console.warn(`Warning during ${key} cleanup:`, error);
+          }
+          activeSubscriptions.delete(key);
+        }
       }
+      
+      isSubscribedRef.current = false;
+      subscriptionKeyRef.current = null;
     }
-  }, [tableName]);
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -44,26 +55,31 @@ export const useRealtimeSubscription = ({
       return;
     }
 
-    // Prevent duplicate subscriptions
-    const currentSubscriptionId = `${tableName}_${user.id}`;
-    if (isSubscribedRef.current && subscriptionIdRef.current === currentSubscriptionId) {
-      return;
+    const subscriptionKey = `${tableName}_${user.id}`;
+    subscriptionKeyRef.current = subscriptionKey;
+
+    // Check if subscription already exists
+    let subscription = activeSubscriptions.get(subscriptionKey);
+    
+    if (subscription) {
+      // Subscription exists, just increment subscriber count
+      subscription.subscribers++;
+      isSubscribedRef.current = true;
+      console.log(`📢 Reusing existing ${tableName} subscription, subscribers: ${subscription.subscribers}`);
+      return cleanup;
     }
 
-    // Clean up any existing subscription first
-    cleanup();
-
-    console.log(`📢 Setting up ${tableName} realtime subscription`);
+    // Create new subscription
+    console.log(`📢 Creating new ${tableName} realtime subscription`);
 
     const channelName = `${tableName}_${user.id}_${Date.now()}`;
     const channel = supabase.channel(channelName);
 
-    // Set up the subscription with proper error handling
-    const subscription = channel.on('postgres_changes', {
+    // Set up the subscription
+    channel.on('postgres_changes', {
       event: '*',
       schema: 'public',
       table: tableName,
-      filter: `user_id=eq.${user.id}`
     }, (payload) => {
       console.log(`📢 ${tableName} change detected:`, payload);
       if (onDataChange) {
@@ -73,22 +89,26 @@ export const useRealtimeSubscription = ({
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key?.includes(tableName) || key?.includes('transactions') || key?.includes('expenses');
+          return key?.includes(tableName) || key?.includes('posts') || key?.includes('comments') || key?.includes('reactions');
         }
       });
     });
 
-    // Subscribe with proper status handling
-    subscription.subscribe((status) => {
+    // Subscribe and track status
+    channel.subscribe((status) => {
       console.log(`📡 ${tableName} realtime status:`, status);
       if (status === 'SUBSCRIBED') {
-        channelRef.current = channel;
+        // Store subscription in global map
+        activeSubscriptions.set(subscriptionKey, {
+          channel,
+          subscribers: 1
+        });
         isSubscribedRef.current = true;
-        subscriptionIdRef.current = currentSubscriptionId;
         console.log(`✅ ${tableName} realtime subscription active`);
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         console.log(`❌ ${tableName} subscription error/closed:`, status);
-        cleanup();
+        activeSubscriptions.delete(subscriptionKey);
+        isSubscribedRef.current = false;
       }
     });
 
