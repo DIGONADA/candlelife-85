@@ -5,7 +5,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { 
   Moon, Sun, Palette, Zap, Ghost, Mountain, Coffee, 
   PaintBucket, Sunset, Leaf, Waves, Sparkles, Clock, 
-  Crown, Terminal, Monitor
+  Crown, Terminal, Monitor, Database
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUnifiedTheme } from "@/context/UnifiedThemeContext";
@@ -23,26 +23,32 @@ const themeCategories = [
   {
     name: "Coloridos",
     themes: [
-      { id: "cyberpunk", name: "Cyberpunk", icon: Zap },
-      { id: "dracula", name: "Dracula", icon: Ghost },
-      { id: "nord", name: "Nord", icon: Mountain },
       { id: "purple", name: "Roxo", icon: PaintBucket },
       { id: "green", name: "Verde", icon: Leaf },
       { id: "ocean", name: "Oceano", icon: Waves },
+      { id: "sunset", name: "Pôr do Sol", icon: Sunset },
+      { id: "forest", name: "Floresta", icon: Leaf },
+      { id: "coffee", name: "Café", icon: Coffee },
+    ]
+  },
+  {
+    name: "Temáticos",
+    themes: [
+      { id: "dracula", name: "Dracula", icon: Ghost },
+      { id: "nord", name: "Nord", icon: Mountain },
+      { id: "cyberpunk", name: "Cyberpunk", icon: Zap },
+      { id: "super-hacker", name: "Matrix", icon: Terminal },
+      { id: "supabase", name: "Supabase", icon: Database },
+      { id: "royal", name: "Real", icon: Crown },
     ]
   },
   {
     name: "Especiais",
     themes: [
-      { id: "sunset", name: "Pôr do Sol", icon: Sunset },
-      { id: "forest", name: "Floresta", icon: Leaf },
-      { id: "coffee", name: "Café", icon: Coffee },
       { id: "pastel", name: "Pastel", icon: Sparkles },
       { id: "neon", name: "Neon", icon: Zap },
       { id: "vintage", name: "Vintage", icon: Clock },
       { id: "midnight", name: "Meia-noite", icon: Moon },
-      { id: "royal", name: "Real", icon: Crown },
-      { id: "super-hacker", name: "Super Hacker", icon: Terminal },
     ]
   }
 ];
@@ -81,7 +87,7 @@ export const UnifiedThemeSettings = () => {
       <div>
         <h2 className="text-xl font-bold mb-2">Personalização</h2>
         <p className="text-sm text-muted-foreground">
-          Escolha o tema que melhor combina com você.
+          Escolha o tema que melhor combina com você. Experimente o novo tema Supabase!
         </p>
       </div>
 
@@ -106,6 +112,11 @@ export const UnifiedThemeSettings = () => {
                   <RadioGroupItem value={id} id={id} disabled={isUpdating} />
                   <Icon className="w-4 h-4" />
                   <span className="text-sm font-medium">{name}</span>
+                  {id === "supabase" && (
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                      Novo
+                    </span>
+                  )}
                 </Label>
               ))}
             </RadioGroup>

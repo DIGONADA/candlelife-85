@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 
-type Theme = "light" | "dark" | "system" | "cyberpunk" | "dracula" | "nord" | "purple" | "green" | "ocean" | "sunset" | "forest" | "coffee" | "pastel" | "neon" | "vintage" | "midnight" | "royal" | "super-hacker";
+type Theme = "light" | "dark" | "system" | "cyberpunk" | "dracula" | "nord" | "purple" | "green" | "ocean" | "sunset" | "forest" | "coffee" | "pastel" | "neon" | "vintage" | "midnight" | "royal" | "super-hacker" | "supabase";
 
 interface UnifiedThemeContextType {
   theme: Theme;
