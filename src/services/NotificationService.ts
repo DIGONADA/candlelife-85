@@ -1,206 +1,184 @@
 
 import { Message, ChatUser } from '@/types/messages';
 
-export interface NotificationData {
-  id: string;
-  title: string;
-  body: string;
-  avatar?: string;
-  timestamp: string;
-  messageId?: string;
-  senderId?: string;
-  conversationId?: string;
-  read: boolean;
-  type: 'message' | 'system' | 'transaction';
+interface NotificationPermissions {
+  notifications: boolean;
+  sound: boolean;
 }
 
-class EnhancedNotificationService {
-  private notifications: NotificationData[] = [];
-  private listeners: ((notifications: NotificationData[]) => void)[] = [];
+class NotificationService {
+  private static instance: NotificationService | null = null;
+  private permissions: NotificationPermissions = {
+    notifications: false,
+    sound: true
+  };
   private audioContext: AudioContext | null = null;
+  private isUserInChat = false;
+  private currentChatUserId: string | null = null;
+
+  static getInstance(): NotificationService {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
+    }
+    return NotificationService.instance;
+  }
 
   constructor() {
-    this.initializeAudio();
-    this.loadStoredNotifications();
+    this.initializeAudioContext();
+    this.requestNotificationPermission();
   }
 
-  private async initializeAudio() {
+  private async initializeAudioContext() {
     try {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Setup mobile audio unlock
+      const unlockAudio = async () => {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
+        }
+        document.removeEventListener('touchstart', unlockAudio);
+        document.removeEventListener('click', unlockAudio);
+      };
+
+      document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+      document.addEventListener('click', unlockAudio, { once: true });
     } catch (error) {
-      console.warn('Web Audio API não suportado:', error);
+      console.warn('Failed to initialize audio context:', error);
     }
   }
 
-  private playBellSound() {
-    if (!this.audioContext) return;
+  private async requestNotificationPermission(): Promise<void> {
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        this.permissions.notifications = permission === 'granted';
+      } else {
+        this.permissions.notifications = Notification.permission === 'granted';
+      }
+    }
+  }
+
+  setUserInChat(inChat: boolean, chatUserId?: string) {
+    this.isUserInChat = inChat;
+    this.currentChatUserId = chatUserId || null;
+    console.log('🔔 User chat status:', { inChat, chatUserId });
+  }
+
+  setSoundEnabled(enabled: boolean) {
+    this.permissions.sound = enabled;
+  }
+
+  private async playBeepSound(): Promise<void> {
+    if (!this.permissions.sound || !this.audioContext) {
+      console.log('🔇 Sound disabled or audio context not available');
+      return;
+    }
 
     try {
-      // Criar som de sino usando osciladores
-      const oscillator1 = this.audioContext.createOscillator();
-      const oscillator2 = this.audioContext.createOscillator();
+      // Resume audio context if suspended
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+
+      // Create a pleasant notification beep
+      const oscillator = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
-      
-      oscillator1.connect(gainNode);
-      oscillator2.connect(gainNode);
+
+      oscillator.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
-      
-      // Frequências do sino
-      oscillator1.frequency.setValueAtTime(800, this.audioContext.currentTime);
-      oscillator2.frequency.setValueAtTime(1000, this.audioContext.currentTime);
-      
-      // Envelope do som
+
+      // Configure the beep sound
+      oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(600, this.audioContext.currentTime + 0.1);
+      oscillator.type = 'sine';
+
+      // Configure volume envelope
       gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
       gainNode.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.8);
-      
-      oscillator1.start(this.audioContext.currentTime);
-      oscillator2.start(this.audioContext.currentTime);
-      oscillator1.stop(this.audioContext.currentTime + 0.8);
-      oscillator2.stop(this.audioContext.currentTime + 0.8);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
+
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.5);
+
+      console.log('🔊 Beep sound played successfully');
     } catch (error) {
-      console.warn('Erro ao reproduzir som:', error);
+      console.warn('Failed to play beep sound:', error);
     }
   }
 
-  private loadStoredNotifications() {
+  private showSystemNotification(message: Message, senderInfo: ChatUser): void {
+    if (!this.permissions.notifications) {
+      console.log('🔕 System notifications not permitted');
+      return;
+    }
+
     try {
-      const stored = localStorage.getItem('app_notifications');
-      if (stored) {
-        this.notifications = JSON.parse(stored);
-      }
-    } catch (error) {
-      console.warn('Erro ao carregar notificações:', error);
-    }
-  }
-
-  private saveNotifications() {
-    try {
-      localStorage.setItem('app_notifications', JSON.stringify(this.notifications));
-    } catch (error) {
-      console.warn('Erro ao salvar notificações:', error);
-    }
-  }
-
-  addNotification(notification: Omit<NotificationData, 'id' | 'timestamp' | 'read'>) {
-    const newNotification: NotificationData = {
-      ...notification,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-
-    this.notifications.unshift(newNotification);
-    
-    // Manter apenas as últimas 50 notificações
-    if (this.notifications.length > 50) {
-      this.notifications = this.notifications.slice(0, 50);
-    }
-
-    this.saveNotifications();
-    this.notifyListeners();
-
-    // Tocar som
-    this.playBellSound();
-
-    // Mostrar notificação nativa se permitido
-    this.showNativeNotification(newNotification);
-
-    return newNotification;
-  }
-
-  private async showNativeNotification(notification: NotificationData) {
-    if (!('Notification' in window)) return;
-
-    if (Notification.permission === 'granted') {
-      const nativeNotif = new Notification(notification.title, {
-        body: notification.body,
-        icon: notification.avatar || '/notification-badge.png',
-        badge: '/notification-badge.png',
-        tag: notification.id
+      const notification = new Notification(`Nova mensagem de ${senderInfo.username}`, {
+        body: message.content,
+        icon: senderInfo.avatar_url || '/favicon.ico',
+        badge: '/favicon.ico',
+        tag: `message-${message.sender_id}`,
+        requireInteraction: false,
+        silent: false
       });
 
-      // Fechar automaticamente após 5 segundos
-      setTimeout(() => nativeNotif.close(), 5000);
-    } else if (Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        this.showNativeNotification(notification);
-      }
+      // Auto close after 5 seconds
+      setTimeout(() => {
+        notification.close();
+      }, 5000);
+
+      // Handle click to focus window
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+        
+        // Dispatch custom event to open chat
+        const event = new CustomEvent('openChat', {
+          detail: { userId: message.sender_id }
+        });
+        window.dispatchEvent(event);
+      };
+
+      console.log('🔔 System notification shown');
+    } catch (error) {
+      console.warn('Failed to show system notification:', error);
     }
   }
 
-  markAsRead(notificationId: string) {
-    const notification = this.notifications.find(n => n.id === notificationId);
-    if (notification) {
-      notification.read = true;
-      this.saveNotifications();
-      this.notifyListeners();
+  async handleNewMessage(message: Message, senderInfo: ChatUser): Promise<void> {
+    console.log('🔔 Processing new message notification:', {
+      sender: senderInfo.username,
+      isUserInChat: this.isUserInChat,
+      currentChatUserId: this.currentChatUserId,
+      messageSenderId: message.sender_id
+    });
+
+    // Check if user is in the specific chat with this sender
+    const isInSenderChat = this.isUserInChat && this.currentChatUserId === message.sender_id;
+
+    // Only notify if user is NOT in the chat with this specific sender
+    if (!isInSenderChat) {
+      console.log('🔔 User is outside chat, showing notification');
+      
+      // Play beep sound
+      await this.playBeepSound();
+      
+      // Show system notification
+      this.showSystemNotification(message, senderInfo);
+    } else {
+      console.log('🔕 User is in chat with sender, skipping notification');
     }
   }
 
-  markAllAsRead() {
-    this.notifications.forEach(n => n.read = true);
-    this.saveNotifications();
-    this.notifyListeners();
+  async requestPermissions(): Promise<boolean> {
+    await this.requestNotificationPermission();
+    return this.permissions.notifications;
   }
 
-  removeNotification(notificationId: string) {
-    this.notifications = this.notifications.filter(n => n.id !== notificationId);
-    this.saveNotifications();
-    this.notifyListeners();
-  }
-
-  clearAll() {
-    this.notifications = [];
-    this.saveNotifications();
-    this.notifyListeners();
-  }
-
-  subscribe(listener: (notifications: NotificationData[]) => void) {
-    this.listeners.push(listener);
-    listener(this.notifications);
-
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== listener);
-    };
-  }
-
-  private notifyListeners() {
-    this.listeners.forEach(listener => listener([...this.notifications]));
-  }
-
-  getUnreadCount(): number {
-    return this.notifications.filter(n => !n.read).length;
-  }
-
-  getNotifications(): NotificationData[] {
-    return [...this.notifications];
-  }
-
-  // Método para notificações de mensagens
-  addMessageNotification(message: Message, sender: ChatUser) {
-    return this.addNotification({
-      title: sender.full_name || sender.username || 'Nova mensagem',
-      body: message.content.length > 100 
-        ? message.content.substring(0, 100) + '...' 
-        : message.content,
-      avatar: sender.avatar_url,
-      messageId: message.id,
-      senderId: message.sender_id,
-      conversationId: message.sender_id,
-      type: 'message'
-    });
-  }
-
-  // Método para notificações do sistema
-  addSystemNotification(title: string, body: string) {
-    return this.addNotification({
-      title,
-      body,
-      type: 'system'
-    });
+  getPermissions(): NotificationPermissions {
+    return { ...this.permissions };
   }
 }
 
-export const notificationService = new EnhancedNotificationService();
+export const notificationService = NotificationService.getInstance();

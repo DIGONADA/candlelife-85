@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from './use-toast';
 import { messageKeys } from '@/lib/query-keys';
 import { chatSubscriptionManager } from '@/services/ChatSubscriptionManager';
+import { useNotifications } from '@/hooks/useNotifications';
 import { 
   Message, 
   ChatUser, 
@@ -17,10 +17,18 @@ export const useUnifiedChat = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { setUserInChat } = useNotifications();
   const [isConnected, setIsConnected] = useState(false);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const initializationRef = useRef(false);
+
+  // Update notification service when active conversation changes
+  useEffect(() => {
+    if (user?.id) {
+      setUserInChat(!!activeConversation, activeConversation || undefined);
+    }
+  }, [activeConversation, user?.id, setUserInChat]);
 
   // Setup chat subscription only once per user
   useEffect(() => {
@@ -61,8 +69,9 @@ export const useUnifiedChat = () => {
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      setUserInChat(false);
     };
-  }, []);
+  }, [setUserInChat]);
 
   // Get chat users
   const useChatUsers = () => {

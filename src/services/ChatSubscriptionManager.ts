@@ -1,8 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { messageKeys } from '@/lib/query-keys';
-import { unifiedNotificationService } from '@/services/unifiedNotificationService';
-import { enhancedNotificationSoundService } from '@/services/enhancedNotificationSound';
+import { notificationService } from '@/services/NotificationService';
 import { Message, ChatUser } from '@/types/messages';
 
 class ChatSubscriptionManager {
@@ -187,15 +186,8 @@ class ChatSubscriptionManager {
           unread_count: 0
         };
 
-        // Play notification sound (with error handling)
-        try {
-          await enhancedNotificationSoundService.play();
-        } catch (soundError) {
-          console.warn('⚠️ Could not play notification sound:', soundError);
-        }
-
-        // Add notification
-        unifiedNotificationService.addMessageNotification(newMessage, senderInfo);
+        // Use new notification service
+        await notificationService.handleNewMessage(newMessage, senderInfo);
 
         // Invalidate queries
         if (this.queryClient) {

@@ -5,8 +5,11 @@ import { UnifiedProfileSettings } from "@/components/settings/UnifiedProfileSett
 import { UnifiedThemeSettings } from "@/components/settings/UnifiedThemeSettings";
 import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
+import { useGlobalChatListener } from "@/hooks/useGlobalChatListener";
 
 const Settings = () => {
+  useGlobalChatListener();
+
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-5xl">
       <div className="mb-6 md:mb-8">

@@ -1,10 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DeleteConversationDialog } from "./DeleteConversationDialog";
 import { ChatHeader } from "./ChatHeader";
 import { ChatContent } from "./ChatContent";
 import { useChatMessages } from "./hooks/useChatMessages";
+import { useNotifications } from "@/hooks/useNotifications";
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const ChatModal = ({
   recipientAvatar,
 }: ChatModalProps) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const { setUserInChat } = useNotifications();
   
   const {
     messages,
@@ -43,6 +45,19 @@ export const ChatModal = ({
     handleLoadMoreMessages,
     handleTypingStatusChange
   } = useChatMessages({ recipientId, isOpen });
+
+  // Update notification service when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setUserInChat(true, recipientId);
+    } else {
+      setUserInChat(false);
+    }
+
+    return () => {
+      setUserInChat(false);
+    };
+  }, [isOpen, recipientId, setUserInChat]);
 
   return (
     <>
