@@ -5,19 +5,10 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Bell, Volume2, TestTube, Play } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useToast } from '@/hooks/use-toast';
-
-const notificationSounds = [
-  { id: 'beep', name: 'Beep Simples', description: 'Som básico de notificação' },
-  { id: 'chime', name: 'Chime Suave', description: 'Som melodioso e suave' },
-  { id: 'ding', name: 'Ding Clássico', description: 'Som clássico de sino' },
-  { id: 'bell', name: 'Sino Tradicional', description: 'Som de sino tradicional' },
-  { id: 'ping', name: 'Ping Moderno', description: 'Som moderno e discreto' },
-  { id: 'alert', name: 'Alerta Forte', description: 'Som mais alto e chamativo' },
-];
+import { enhancedNotificationSoundService } from '@/services/enhancedNotificationSound';
 
 export const NotificationSettings = () => {
   const { setSoundEnabled, requestPermissions, getPermissions } = useNotifications();
@@ -25,7 +16,6 @@ export const NotificationSettings = () => {
   const [settings, setSettings] = useState({
     sound: true,
     systemNotifications: false,
-    selectedSound: 'beep'
   });
 
   useEffect(() => {
@@ -39,31 +29,12 @@ export const NotificationSettings = () => {
 
   const handleSoundToggle = (enabled: boolean) => {
     setSoundEnabled(enabled);
+    enhancedNotificationSoundService.setEnabled(enabled);
     setSettings(prev => ({ ...prev, sound: enabled }));
     toast({
       title: enabled ? 'Som ativado' : 'Som desativado',
       description: enabled ? 'Você receberá notificações sonoras' : 'Notificações sonoras desativadas'
     });
-  };
-
-  const handleSoundChange = (soundId: string) => {
-    setSettings(prev => ({ ...prev, selectedSound: soundId }));
-    // Save to localStorage for persistence
-    localStorage.setItem('notification_sound', soundId);
-    toast({
-      title: 'Som alterado',
-      description: `Som de notificação alterado para ${notificationSounds.find(s => s.id === soundId)?.name}`
-    });
-  };
-
-  const testSound = (soundId: string) => {
-    // Play the selected sound for testing
-    const sound = notificationSounds.find(s => s.id === soundId);
-    toast({
-      title: 'Testando som',
-      description: `Reproduzindo: ${sound?.name}`
-    });
-    // Here you would actually play the sound
   };
 
   const handleRequestPermissions = async () => {
@@ -94,6 +65,22 @@ export const NotificationSettings = () => {
       toast({
         title: 'Teste de Notificação',
         description: 'Esta seria uma notificação do sistema'
+      });
+    }
+  };
+
+  const testSound = async () => {
+    try {
+      await enhancedNotificationSoundService.testSound();
+      toast({
+        title: 'Som testado',
+        description: 'O som de notificação foi reproduzido com sucesso'
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro no som',
+        description: 'Não foi possível reproduzir o som de notificação',
+        variant: 'destructive'
       });
     }
   };
@@ -174,41 +161,19 @@ export const NotificationSettings = () => {
           {settings.sound && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Escolha o Som</Label>
+                <Label>Testar Som</Label>
                 <p className="text-sm text-muted-foreground">
-                  Selecione o som que será reproduzido nas notificações
+                  Clique no botão abaixo para testar o som de notificação
                 </p>
+                <Button
+                  onClick={testSound}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Testar Som de Notificação
+                </Button>
               </div>
-              
-              <RadioGroup
-                value={settings.selectedSound}
-                onValueChange={handleSoundChange}
-                className="space-y-3"
-              >
-                {notificationSounds.map((sound) => (
-                  <div key={sound.id} className="flex items-center justify-between border rounded-lg p-3">
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value={sound.id} id={sound.id} />
-                      <div className="space-y-1">
-                        <Label htmlFor={sound.id} className="text-sm font-medium">
-                          {sound.name}
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          {sound.description}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => testSound(sound.id)}
-                      className="ml-2"
-                    >
-                      <Play className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </RadioGroup>
             </div>
           )}
         </CardContent>
@@ -246,3 +211,4 @@ export const NotificationSettings = () => {
     </div>
   );
 };
+
