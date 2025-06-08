@@ -10,8 +10,13 @@ interface SubscriptionConfig {
   dependencies?: any[];
 }
 
-// Global map to track active subscriptions
-const activeSubscriptions = new Map<string, { channel: any; subscribers: number }>();
+// Global map to track active subscriptions with their status
+const activeSubscriptions = new Map<string, { 
+  channel: any; 
+  subscribers: number; 
+  isSubscribed: boolean;
+  isSubscribing: boolean;
+}>();
 
 export const useRealtimeSubscription = ({
   tableName,
@@ -21,10 +26,10 @@ export const useRealtimeSubscription = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const subscriptionKeyRef = useRef<string | null>(null);
-  const isSubscribedRef = useRef(false);
+  const isActiveRef = useRef(false);
 
   const cleanup = useCallback(() => {
-    if (subscriptionKeyRef.current && isSubscribedRef.current) {
+    if (subscriptionKeyRef.current && isActiveRef.current) {
       const key = subscriptionKeyRef.current;
       const subscription = activeSubscriptions.get(key);
       
@@ -35,8 +40,10 @@ export const useRealtimeSubscription = ({
         if (subscription.subscribers <= 0) {
           console.log(`🧹 Cleaning up subscription for ${key}`);
           try {
-            subscription.channel.unsubscribe();
-            supabase.removeChannel(subscription.channel);
+            if (subscription.isSubscribed) {
+              subscription.channel.unsubscribe();
+              supabase.removeChannel(subscription.channel);
+            }
           } catch (error) {
             console.warn(`Warning during ${key} cleanup:`, error);
           }
@@ -44,7 +51,7 @@ export const useRealtimeSubscription = ({
         }
       }
       
-      isSubscribedRef.current = false;
+      isActiveRef.current = false;
       subscriptionKeyRef.current = null;
     }
   }, []);
@@ -64,8 +71,15 @@ export const useRealtimeSubscription = ({
     if (subscription) {
       // Subscription exists, just increment subscriber count
       subscription.subscribers++;
-      isSubscribedRef.current = true;
+      isActiveRef.current = true;
       console.log(`📢 Reusing existing ${tableName} subscription, subscribers: ${subscription.subscribers}`);
+      return cleanup;
+    }
+
+    // Prevent concurrent subscription attempts
+    const existingSub = activeSubscriptions.get(subscriptionKey);
+    if (existingSub?.isSubscribing) {
+      console.log(`⏳ ${tableName} subscription already in progress, skipping`);
       return cleanup;
     }
 
@@ -74,6 +88,16 @@ export const useRealtimeSubscription = ({
 
     const channelName = `${tableName}_${user.id}_${Date.now()}`;
     const channel = supabase.channel(channelName);
+
+    // Store subscription info immediately to prevent duplicates
+    activeSubscriptions.set(subscriptionKey, {
+      channel,
+      subscribers: 1,
+      isSubscribed: false,
+      isSubscribing: true
+    });
+
+    isActiveRef.current = true;
 
     // Set up the subscription
     channel.on('postgres_changes', {
@@ -97,18 +121,24 @@ export const useRealtimeSubscription = ({
     // Subscribe and track status
     channel.subscribe((status) => {
       console.log(`📡 ${tableName} realtime status:`, status);
+      const currentSub = activeSubscriptions.get(subscriptionKey);
+      
+      if (!currentSub) return;
+
       if (status === 'SUBSCRIBED') {
-        // Store subscription in global map
-        activeSubscriptions.set(subscriptionKey, {
-          channel,
-          subscribers: 1
-        });
-        isSubscribedRef.current = true;
+        currentSub.isSubscribed = true;
+        currentSub.isSubscribing = false;
         console.log(`✅ ${tableName} realtime subscription active`);
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         console.log(`❌ ${tableName} subscription error/closed:`, status);
-        activeSubscriptions.delete(subscriptionKey);
-        isSubscribedRef.current = false;
+        currentSub.isSubscribed = false;
+        currentSub.isSubscribing = false;
+        
+        // Clean up failed subscription
+        if (currentSub.subscribers <= 1) {
+          activeSubscriptions.delete(subscriptionKey);
+          isActiveRef.current = false;
+        }
       }
     });
 
@@ -120,8 +150,10 @@ export const useRealtimeSubscription = ({
     return cleanup;
   }, [cleanup]);
 
+  const subscription = subscriptionKeyRef.current ? activeSubscriptions.get(subscriptionKeyRef.current) : null;
+  
   return {
-    isSubscribed: isSubscribedRef.current,
+    isSubscribed: subscription?.isSubscribed || false,
     cleanup
   };
 };
