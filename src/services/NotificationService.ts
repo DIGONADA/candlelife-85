@@ -145,21 +145,21 @@ class NotificationService {
         window.focus();
         notification.close();
         
-        // Navigate to the chat conversation
-        const currentPath = window.location.pathname;
-        const targetPath = `/chat/${message.sender_id}`;
+        console.log('🔔 Notification clicked, opening chat with:', {
+          userId: message.sender_id,
+          userName: senderInfo.username,
+          userAvatar: senderInfo.avatar_url
+        });
         
-        if (currentPath !== targetPath) {
-          // Dispatch custom event to open chat
-          const event = new CustomEvent('openChat', {
-            detail: { 
-              userId: message.sender_id,
-              userName: senderInfo.username,
-              userAvatar: senderInfo.avatar_url
-            }
-          });
-          window.dispatchEvent(event);
-        }
+        // Dispatch custom event to open chat with complete user data
+        const event = new CustomEvent('openChat', {
+          detail: { 
+            userId: message.sender_id,
+            userName: senderInfo.username || senderInfo.display_name || 'Usuário',
+            userAvatar: senderInfo.avatar_url || senderInfo.profile_picture_url
+          }
+        });
+        window.dispatchEvent(event);
       };
 
       console.log('🔔 System notification shown for:', senderInfo.username);
@@ -170,11 +170,13 @@ class NotificationService {
 
   async handleNewMessage(message: Message, senderInfo: ChatUser): Promise<void> {
     console.log('🔔 Processing new message notification:', {
-      sender: senderInfo.username,
+      sender: senderInfo.username || senderInfo.display_name,
+      senderId: message.sender_id,
       isUserInChat: this.isUserInChat,
       currentChatUserId: this.currentChatUserId,
       messageSenderId: message.sender_id,
-      messagePreview: message.content.substring(0, 50) + '...'
+      messagePreview: message.content.substring(0, 50) + '...',
+      senderInfo
     });
 
     // Check if user is in the specific chat with this sender
