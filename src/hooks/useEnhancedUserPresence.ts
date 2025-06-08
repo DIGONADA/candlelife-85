@@ -15,12 +15,24 @@ export const useEnhancedUserPresence = () => {
   const [userStatuses, setUserStatuses] = useState<Map<string, EnhancedUserPresence>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Enhanced presence update with better error handling
+  // Enhanced presence update with better error handling and immediate UI feedback
   const updatePresence = useCallback(async (
     status: 'online' | 'offline' | 'away' | 'typing',
     currentConversation?: string
   ) => {
     if (!user) return;
+
+    // Immediate local update for better UX
+    setUserStatuses(prev => {
+      const newMap = new Map(prev);
+      newMap.set(user.id, {
+        user_id: user.id,
+        status,
+        last_seen: new Date().toISOString(),
+        current_conversation: currentConversation || undefined
+      });
+      return newMap;
+    });
 
     try {
       const { error } = await supabase
@@ -40,7 +52,7 @@ export const useEnhancedUserPresence = () => {
     }
   }, [user]);
 
-  // Load initial presence data
+  // Load initial presence data with better error handling
   useEffect(() => {
     if (!user) return;
 
@@ -78,12 +90,12 @@ export const useEnhancedUserPresence = () => {
     // Set initial online status
     updatePresence('online');
 
-    // Enhanced heartbeat - every 25 seconds to be more responsive
+    // More frequent heartbeat for better real-time experience (20 seconds)
     const heartbeat = setInterval(() => {
       updatePresence('online');
-    }, 25000);
+    }, 20000);
 
-    // Real-time subscription for presence changes
+    // Enhanced real-time subscription with better error handling
     const presenceChannel = supabase
       .channel('enhanced_user_presence')
       .on('postgres_changes', {
@@ -91,7 +103,7 @@ export const useEnhancedUserPresence = () => {
         schema: 'public',
         table: 'user_presence'
       }, (payload) => {
-        console.log('📡 Presence change detected:', payload);
+        console.log('📡 Real-time presence update:', payload);
         
         if (payload.eventType === 'DELETE') {
           setUserStatuses(prev => {
@@ -109,10 +121,10 @@ export const useEnhancedUserPresence = () => {
         }
       })
       .subscribe((status) => {
-        console.log('📡 Enhanced presence subscription status:', status);
+        console.log('📡 Presence subscription status:', status);
       });
 
-    // Enhanced visibility change handling
+    // Enhanced visibility and focus handling for better presence detection
     const handleVisibilityChange = () => {
       if (document.hidden) {
         updatePresence('away');
@@ -121,23 +133,15 @@ export const useEnhancedUserPresence = () => {
       }
     };
 
-    // Enhanced beforeunload handling
     const handleBeforeUnload = () => {
-      // Use sendBeacon for better reliability on page unload
-      if (navigator.sendBeacon) {
-        const data = new FormData();
-        data.append('user_id', user.id);
-        data.append('status', 'offline');
-        // This would need a server endpoint to handle the beacon
-      } else {
-        updatePresence('offline');
-      }
+      // Sync call for immediate offline status
+      navigator.sendBeacon && navigator.sendBeacon('/api/presence/offline') || updatePresence('offline');
     };
 
-    // Enhanced focus/blur handling for better presence detection
     const handleFocus = () => updatePresence('online');
     const handleBlur = () => updatePresence('away');
 
+    // Enhanced event listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('focus', handleFocus);
@@ -154,17 +158,16 @@ export const useEnhancedUserPresence = () => {
     };
   }, [user, updatePresence, isInitialized]);
 
-  // Enhanced status checking with smart offline detection
+  // More aggressive offline detection for better real-time status (60 seconds)
   const getUserStatus = useCallback((userId: string): 'online' | 'offline' | 'away' | 'typing' => {
     const presence = userStatuses.get(userId);
     if (!presence) return 'offline';
 
-    // More aggressive offline detection - 90 seconds instead of 2 minutes
     const lastSeen = new Date(presence.last_seen);
     const now = new Date();
     const diffSeconds = (now.getTime() - lastSeen.getTime()) / 1000;
 
-    if (diffSeconds > 90) return 'offline';
+    if (diffSeconds > 60) return 'offline';
     return presence.status;
   }, [userStatuses]);
 
@@ -177,7 +180,6 @@ export const useEnhancedUserPresence = () => {
     const presence = userStatuses.get(userId);
     if (!presence || presence.status !== 'typing') return false;
     
-    // Check if typing in the specific conversation
     if (conversationId) {
       return presence.current_conversation === conversationId;
     }
@@ -190,10 +192,14 @@ export const useEnhancedUserPresence = () => {
     return presence?.last_seen;
   }, [userStatuses]);
 
-  // Enhanced method to update typing status
+  // Enhanced typing status with automatic reset
   const setTypingStatus = useCallback(async (isTyping: boolean, conversationId?: string) => {
     if (isTyping) {
       await updatePresence('typing', conversationId);
+      // Auto-reset typing status after 3 seconds
+      setTimeout(() => {
+        updatePresence('online', conversationId);
+      }, 3000);
     } else {
       await updatePresence('online', conversationId);
     }

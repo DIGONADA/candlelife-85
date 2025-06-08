@@ -27,7 +27,7 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.75rem;
     
-    /* Custom scrollbar colors */
+    /* Enhanced scrollbar colors for light theme */
     --scrollbar-track: hsl(210 40% 96%);
     --scrollbar-thumb: hsl(215.4 16.3% 46.9%);
     --scrollbar-thumb-hover: hsl(221.2 83.2% 53.3%);
@@ -54,13 +54,13 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
     
-    /* Dark theme scrollbar colors */
+    /* Enhanced scrollbar colors for dark theme */
     --scrollbar-track: hsl(217.2 32.6% 17.5%);
     --scrollbar-thumb: hsl(215 20.2% 65.1%);
     --scrollbar-thumb-hover: hsl(217.2 91.2% 59.8%);
   }
 
-  /* Cyberpunk theme */
+  /* Cyberpunk theme with neon scrollbar */
   [data-theme="cyberpunk"] {
     --background: 220 27% 8%;
     --foreground: 60 100% 88%;
@@ -87,7 +87,7 @@
     --scrollbar-thumb-hover: hsl(180 100% 50%);
   }
 
-  /* Super Hacker theme */
+  /* Super Hacker theme with matrix green scrollbar */
   [data-theme="super-hacker"] {
     --background: 120 100% 4%;
     --foreground: 120 100% 85%;
@@ -114,7 +114,7 @@
     --scrollbar-thumb-hover: hsl(120 100% 40%);
   }
 
-  /* Add more theme scrollbar colors... */
+  /* Additional theme scrollbar colors */
   [data-theme="dracula"] {
     --scrollbar-track: hsl(231 15% 18%);
     --scrollbar-thumb: hsl(265 89% 78%);
@@ -137,7 +137,7 @@
     font-family: "Inter", sans-serif;
   }
 
-  /* Custom scrollbar styling */
+  /* Enhanced custom scrollbar styling with smooth transitions */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -146,29 +146,31 @@
   ::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
     border-radius: 4px;
+    margin: 2px;
   }
 
   ::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 4px;
-    transition: background-color 0.2s ease;
+    transition: all 0.3s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
+    transform: scale(1.1);
   }
 
   ::-webkit-scrollbar-corner {
     background: var(--scrollbar-track);
   }
 
-  /* Firefox scrollbar */
+  /* Enhanced Firefox scrollbar with theme support */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 
-  /* Smooth scrolling */
+  /* Smooth scrolling for better UX */
   html {
     scroll-behavior: smooth;
   }
@@ -192,5 +194,21 @@
 
   .hover-scale {
     @apply transition-transform duration-200 hover:scale-105;
+  }
+
+  /* Enhanced animations */
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
 }
