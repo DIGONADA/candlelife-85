@@ -114,13 +114,25 @@ class NotificationService {
     }
 
     try {
+      // Truncate message content to 100 characters
+      const messagePreview = message.content.length > 100 
+        ? message.content.substring(0, 100) + '...'
+        : message.content;
+
       const notification = new Notification(`Nova mensagem de ${senderInfo.username}`, {
-        body: message.content,
+        body: messagePreview,
         icon: senderInfo.avatar_url || '/favicon.ico',
         badge: '/favicon.ico',
         tag: `message-${message.sender_id}`,
         requireInteraction: false,
-        silent: false
+        silent: false,
+        data: {
+          senderId: message.sender_id,
+          senderName: senderInfo.username,
+          senderAvatar: senderInfo.avatar_url,
+          messageId: message.id,
+          messageContent: message.content
+        }
       });
 
       // Auto close after 5 seconds
@@ -128,19 +140,29 @@ class NotificationService {
         notification.close();
       }, 5000);
 
-      // Handle click to focus window
+      // Handle click to focus window and open chat
       notification.onclick = () => {
         window.focus();
         notification.close();
         
-        // Dispatch custom event to open chat
-        const event = new CustomEvent('openChat', {
-          detail: { userId: message.sender_id }
-        });
-        window.dispatchEvent(event);
+        // Navigate to the chat conversation
+        const currentPath = window.location.pathname;
+        const targetPath = `/chat/${message.sender_id}`;
+        
+        if (currentPath !== targetPath) {
+          // Dispatch custom event to open chat
+          const event = new CustomEvent('openChat', {
+            detail: { 
+              userId: message.sender_id,
+              userName: senderInfo.username,
+              userAvatar: senderInfo.avatar_url
+            }
+          });
+          window.dispatchEvent(event);
+        }
       };
 
-      console.log('🔔 System notification shown');
+      console.log('🔔 System notification shown for:', senderInfo.username);
     } catch (error) {
       console.warn('Failed to show system notification:', error);
     }
@@ -151,7 +173,8 @@ class NotificationService {
       sender: senderInfo.username,
       isUserInChat: this.isUserInChat,
       currentChatUserId: this.currentChatUserId,
-      messageSenderId: message.sender_id
+      messageSenderId: message.sender_id,
+      messagePreview: message.content.substring(0, 50) + '...'
     });
 
     // Check if user is in the specific chat with this sender
@@ -164,7 +187,7 @@ class NotificationService {
       // Play beep sound
       await this.playBeepSound();
       
-      // Show system notification
+      // Show system notification with detailed info
       this.showSystemNotification(message, senderInfo);
     } else {
       console.log('🔕 User is in chat with sender, skipping notification');
